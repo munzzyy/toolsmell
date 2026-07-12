@@ -1,0 +1,23 @@
+{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Fetches the current weather conditions for a location and returns the temperature, humidity, and a short forecast summary as JSON. Pass units to choose the temperature scale; defaults to metric. Raises an error if the location cannot be found.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name or 'latitude,longitude' pair to look up, for example 'Seattle' or '47.6,-122.3'."
+          },
+          "units": {
+            "type": "string",
+            "description": "Temperature unit for the result.",
+            "enum": ["metric", "imperial", "standard"]
+          }
+        },
+        "required": ["location"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Handles requests.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": { "type": "string" },
+          "units": {
+            "type": "string",
+            "description": "Either 'metric', 'imperial', or 'standard'."
+          }
+        }
+      }
+    }
+  ]
+}
