@@ -1,0 +1,12 @@
+{
+  "tools": [
+    {
+      "name": "list_supported_currencies",
+      "description": "Returns the full list of currency codes this server can convert between, as an array of three-letter ISO codes. Takes no parameters and never fails once the server is running.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ]
+}

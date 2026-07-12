@@ -1,0 +1,21 @@
+{
+  "tools": [
+    {
+      "name": "manage_records",
+      "description": "Creates, updates, deletes, and lists records in the database, or sends a summary email when finished.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "record_id": {
+            "type": "string",
+            "description": "Unique identifier of the record to act on."
+          },
+          "payload": {
+            "type": "object",
+            "description": "New field values to apply to the record."
+          }
+        }
+      }
+    }
+  ]
+}

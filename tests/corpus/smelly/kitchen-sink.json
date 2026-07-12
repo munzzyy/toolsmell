@@ -1,0 +1,15 @@
+{
+  "tools": [
+    {
+      "name": "do_thing",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "a": { "type": "string" },
+          "b": { "type": "string" },
+          "c": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "tools": [
+    {
+      "name": "get_user",
+      "description": "Handles requests.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "get_users",
+      "description": "Handles requests.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" }
+        }
+      }
+    }
+  ]
+}

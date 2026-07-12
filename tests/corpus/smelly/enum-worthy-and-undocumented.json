@@ -1,0 +1,19 @@
+{
+  "tools": [
+    {
+      "name": "sort_results",
+      "description": "Sorts a list of search results by the given field and returns the reordered array; raises an error if order is not recognized.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order": {
+            "type": "string",
+            "description": "Sort order to use, either 'asc', 'desc', or 'relevance'."
+          },
+          "limit": { "type": "integer" }
+        },
+        "required": ["order"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Fetches the current weather conditions for a location and returns the temperature, humidity, and a short forecast summary as JSON. Pass units to choose the temperature scale; defaults to metric. Raises an error if the location cannot be found.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "City name or 'latitude,longitude' pair to look up, for example 'Seattle' or '47.6,-122.3'."
+          },
+          "units": {
+            "type": "string",
+            "description": "Temperature unit for the result.",
+            "enum": ["metric", "imperial", "standard"]
+          }
+        },
+        "required": ["location"]
+      }
+    },
+    {
+      "name": "convert_currency",
+      "description": "Converts a monetary amount from one currency to another using current exchange rates and returns the converted amount along with the exchange rate used. For example, convert_currency(amount=100, from_currency=\"USD\", to_currency=\"EUR\") returns 92.5 with rate 0.925. Raises an error if either currency code is not recognized.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "The amount of money to convert, as a positive number."
+          },
+          "from_currency": {
+            "type": "string",
+            "description": "Three-letter ISO 4217 code of the currency to convert from, for example USD or EUR."
+          },
+          "to_currency": {
+            "type": "string",
+            "description": "Three-letter ISO 4217 code of the currency to convert to, for example JPY or GBP."
+          }
+        },
+        "required": ["amount", "from_currency", "to_currency"]
+      }
+    }
+  ]
+}
