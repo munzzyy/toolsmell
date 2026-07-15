@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
                      "for smells that make agents use the tools worse.",
     )
     p.add_argument(
-        "target", nargs="?",
+        "target", nargs="*",
         help="path to a tools/list JSON file (a {\"tools\": [...]} manifest)")
     p.add_argument("--json", action="store_true", help="machine-readable JSON output")
     p.add_argument(
@@ -49,25 +49,29 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
 
-    if not os.path.exists(args.target):
-        print(f"toolsmell: no such file: {args.target}", file=sys.stderr)
-        return 2
-
-    try:
-        result = lint_path(args.target)
-    except ManifestError as e:
-        print(f"toolsmell: {e}", file=sys.stderr)
-        return 2
-
+    exit_code = 0
     color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
-    if args.json:
-        print(render_json(result))
-    else:
-        print(render_human(result, color=color))
 
-    if result.score >= args.max_score:
-        return 1
-    return 0
+    for target_path in args.target:
+        if not os.path.exists(target_path):
+            print(f"toolsmell: no such file: {target_path}", file=sys.stderr)
+            return 2
+
+        try:
+            result = lint_path(target_path)
+        except ManifestError as e:
+            print(f"toolsmell: {e}", file=sys.stderr)
+            return 2
+
+        if args.json:
+            print(render_json(result))
+        else:
+            print(render_human(result, color=color))
+
+        if result.score >= args.max_score:
+            exit_code = 1
+
+    return exit_code
 
 
 if __name__ == "__main__":

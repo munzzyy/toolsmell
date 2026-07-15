@@ -117,6 +117,21 @@ point at. Call the server's `tools/list` method once and save what comes
 back, or paste the tools array into a file by hand -- either way, once it's
 JSON on disk, toolsmell can lint it.
 
+## pre-commit
+
+You can run `toolsmell` as a [pre-commit](https://pre-commit.com/) hook. Add this to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/munzzyy/toolsmell
+    rev: v0.1.0  # replace with the latest version
+    hooks:
+      - id: toolsmell
+        # You can override the files regex to match your manifest
+        # files: ^tools.*\.json$
+```
+By default, the hook matches files with `.*tools.*\.json$`.
+
 ## What it checks
 
 See the [Rules Reference](docs/rules.md) for the full detail on each rule,
