@@ -4,6 +4,14 @@
 [![License: Prosperity 3.0.0](https://img.shields.io/badge/license-Prosperity--3.0.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
+![toolsmell linting three smelly MCP tools: a vague run tool, an overloaded search_orders description, and a near-duplicate name collision, overall smell 79 of 100](docs/media/demo.svg)
+
+That's toolsmell run against [`examples/smelly-tools.json`](examples/smelly-tools.json),
+three tools handpicked to each trip a different smell: a description that's
+just "does stuff," a `search_orders` tool whose description tries to cover
+six jobs at once, and a `search_order`/`search_orders` pair an agent could
+easily call the wrong one of.
+
 toolsmell is a static linter for MCP tool definitions: point it at a
 server's `tools/list` output and it flags description and JSON Schema
 smells that make an agent pick the wrong tool or call it wrong. It never
@@ -99,6 +107,15 @@ above `N`. That's the whole CI story:
 ```yaml
 - run: pipx run toolsmell ./tools.json --max-score 30
 ```
+
+## Getting the manifest
+
+toolsmell only reads a static `tools/list` response -- a JSON file shaped
+`{"tools": [...]}`. Most MCP servers define their tools in code, not as a
+file sitting on disk, so there's usually no `tools.json` lying around to
+point at. Call the server's `tools/list` method once and save what comes
+back, or paste the tools array into a file by hand -- either way, once it's
+JSON on disk, toolsmell can lint it.
 
 ## What it checks
 
