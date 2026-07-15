@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="1751" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14">
+<rect width="840" height="1751" rx="8" fill="#0d1117"/>
+<rect width="840" height="30" rx="8" fill="#161b22"/>
+<rect y="22" width="840" height="8" fill="#161b22"/>
+<circle cx="18" cy="15" r="5.5" fill="#ff5f57"/>
+<circle cx="38" cy="15" r="5.5" fill="#febc2e"/>
+<circle cx="58" cy="15" r="5.5" fill="#28c840"/>
+<text x="420" y="19" text-anchor="middle" fill="#8b949e" font-size="12">toolsmell examples/smelly-tools.json</text>
+<text x="16.0" y="44" fill="#98c379" font-weight="normal" xml:space="preserve">$</text>
+<text x="24.4" y="44" fill="#abb2bf" font-weight="normal" xml:space="preserve"> toolsmell examples/smelly-tools.json</text>
+<text x="16.0" y="82" fill="#abb2bf" font-weight="normal" xml:space="preserve">  toolsmell  examples/smelly-tools.json</text>
+<text x="16.0" y="101" fill="#abb2bf" font-weight="normal" xml:space="preserve">  3 tool(s) checked</text>
+<text x="16.0" y="139" fill="#abb2bf" font-weight="bold" xml:space="preserve">  run  (smell 100/100)</text>
+<text x="16.0" y="158" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="158" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="158" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Vague action verb with no specifics  [TS-004]</text>
+<text x="16.0" y="177" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; description is just &#x27;does stuff&#x27; -- a vague verb with nothing about what it acts</text>
+<text x="16.0" y="196" fill="#abb2bf" font-weight="normal" xml:space="preserve">   on.</text>
+<text x="16.0" y="215" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Replace the vague verb with a specific one and name the input and output it acts </text>
+<text x="16.0" y="234" fill="#5c6370" font-weight="normal" xml:space="preserve">  on.</text>
+<text x="16.0" y="253" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="253" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="253" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter undocumented in the description  [TS-005 | target]</text>
+<text x="16.0" y="272" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; parameter &#x27;target&#x27; is never mentioned in the description.</text>
+<text x="16.0" y="291" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Mention every parameter in the description, or at least the ones whose purpose is</text>
+<text x="16.0" y="310" fill="#5c6370" font-weight="normal" xml:space="preserve">  n&#x27;t obvious from the name.</text>
+<text x="16.0" y="329" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="329" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="329" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Required parameters not distinguishable  [TS-007]</text>
+<text x="16.0" y="348" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; defines parameters but the schema has no &#x27;required&#x27; list, so an agent can&#x27;t tell</text>
+<text x="16.0" y="367" fill="#abb2bf" font-weight="normal" xml:space="preserve">   which are mandatory.</text>
+<text x="16.0" y="386" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;required&#x27; array listing the mandatory parameter names (an empty array is f</text>
+<text x="16.0" y="405" fill="#5c6370" font-weight="normal" xml:space="preserve">  ine if every parameter is optional).</text>
+<text x="16.0" y="424" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="424" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="424" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Description too short to disambiguate  [TS-002]</text>
+<text x="16.0" y="443" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; description is 10 chars / 2 words (want at least 20 chars and 4 words to disambi</text>
+<text x="16.0" y="462" fill="#abb2bf" font-weight="normal" xml:space="preserve">  guate it from similar tools).</text>
+<text x="16.0" y="481" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Expand the description to at least a full sentence: what it does, on what input, </text>
+<text x="16.0" y="500" fill="#5c6370" font-weight="normal" xml:space="preserve">  with what result.</text>
+<text x="16.0" y="519" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="519" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="519" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Description doesn&#x27;t say what the tool returns  [TS-003]</text>
+<text x="16.0" y="538" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; description never says what the tool returns.</text>
+<text x="16.0" y="557" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a sentence describing the return value: its shape, type, or what it contains.</text>
+<text x="16.0" y="576" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="576" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="576" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter has no description field  [TS-006 | target]</text>
+<text x="16.0" y="595" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; parameter &#x27;target&#x27; has no &#x27;description&#x27; in its schema.</text>
+<text x="16.0" y="614" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;description&#x27; to the parameter&#x27;s schema entry.</text>
+<text x="16.0" y="633" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="633" fill="#5c6370" font-weight="normal" xml:space="preserve">  INFO  </text>
+<text x="108.6" y="633" fill="#abb2bf" font-weight="normal" xml:space="preserve"> No error guidance  [TS-008]</text>
+<text x="16.0" y="652" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;run&#x27; description never says what happens on bad input or failure.</text>
+<text x="16.0" y="671" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a sentence about failure behavior: what happens on invalid input, and what th</text>
+<text x="16.0" y="690" fill="#5c6370" font-weight="normal" xml:space="preserve">  e error looks like.</text>
+<text x="16.0" y="728" fill="#abb2bf" font-weight="bold" xml:space="preserve">  search_orders  (smell 100/100)</text>
+<text x="16.0" y="747" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="747" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="747" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter undocumented in the description  [TS-005 | mode]</text>
+<text x="16.0" y="766" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; parameter &#x27;mode&#x27; is never mentioned in the description.</text>
+<text x="16.0" y="785" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Mention every parameter in the description, or at least the ones whose purpose is</text>
+<text x="16.0" y="804" fill="#5c6370" font-weight="normal" xml:space="preserve">  n&#x27;t obvious from the name.</text>
+<text x="16.0" y="823" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="823" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="823" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Required parameters not distinguishable  [TS-007]</text>
+<text x="16.0" y="842" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; defines parameters but the schema has no &#x27;required&#x27; list, so an agent </text>
+<text x="16.0" y="861" fill="#abb2bf" font-weight="normal" xml:space="preserve">  can&#x27;t tell which are mandatory.</text>
+<text x="16.0" y="880" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;required&#x27; array listing the mandatory parameter names (an empty array is f</text>
+<text x="16.0" y="899" fill="#5c6370" font-weight="normal" xml:space="preserve">  ine if every parameter is optional).</text>
+<text x="16.0" y="918" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="918" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="918" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Name collides with another tool  [TS-009]</text>
+<text x="16.0" y="937" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; is a near-duplicate of &#x27;search_order&#x27; -- an agent could easily call th</text>
+<text x="16.0" y="956" fill="#abb2bf" font-weight="normal" xml:space="preserve">  e wrong one.</text>
+<text x="16.0" y="975" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Rename one of the two tools so the names are clearly distinct, or merge them if t</text>
+<text x="16.0" y="994" fill="#5c6370" font-weight="normal" xml:space="preserve">  hey do the same thing.</text>
+<text x="16.0" y="1013" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1013" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="1013" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Overloaded tool description  [TS-011]</text>
+<text x="16.0" y="1032" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; description names multiple actions (get, search, searches, set) -- loo</text>
+<text x="16.0" y="1051" fill="#abb2bf" font-weight="normal" xml:space="preserve">  ks like it does more than one job.</text>
+<text x="16.0" y="1070" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Split the tool into one tool per action, or narrow the description to the single </text>
+<text x="16.0" y="1089" fill="#5c6370" font-weight="normal" xml:space="preserve">  thing it actually does.</text>
+<text x="16.0" y="1108" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1108" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="1108" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter has no description field  [TS-006 | filters]</text>
+<text x="16.0" y="1127" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; parameter &#x27;filters&#x27; has no &#x27;description&#x27; in its schema.</text>
+<text x="16.0" y="1146" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;description&#x27; to the parameter&#x27;s schema entry.</text>
+<text x="16.0" y="1165" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1165" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="1165" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter has no description field  [TS-006 | mode]</text>
+<text x="16.0" y="1184" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; parameter &#x27;mode&#x27; has no &#x27;description&#x27; in its schema.</text>
+<text x="16.0" y="1203" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;description&#x27; to the parameter&#x27;s schema entry.</text>
+<text x="16.0" y="1222" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1222" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="1222" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter has no description field  [TS-006 | query]</text>
+<text x="16.0" y="1241" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; parameter &#x27;query&#x27; has no &#x27;description&#x27; in its schema.</text>
+<text x="16.0" y="1260" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;description&#x27; to the parameter&#x27;s schema entry.</text>
+<text x="16.0" y="1279" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1279" fill="#5c6370" font-weight="normal" xml:space="preserve">  INFO  </text>
+<text x="108.6" y="1279" fill="#abb2bf" font-weight="normal" xml:space="preserve"> No error guidance  [TS-008]</text>
+<text x="16.0" y="1298" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; description never says what happens on bad input or failure.</text>
+<text x="16.0" y="1317" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a sentence about failure behavior: what happens on invalid input, and what th</text>
+<text x="16.0" y="1336" fill="#5c6370" font-weight="normal" xml:space="preserve">  e error looks like.</text>
+<text x="16.0" y="1355" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1355" fill="#5c6370" font-weight="normal" xml:space="preserve">  INFO  </text>
+<text x="108.6" y="1355" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Missing example for a multi-parameter tool  [TS-010]</text>
+<text x="16.0" y="1374" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; takes 3 parameters but the description has no example call.</text>
+<text x="16.0" y="1393" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a short example showing typical argument values.</text>
+<text x="16.0" y="1431" fill="#abb2bf" font-weight="bold" xml:space="preserve">  search_order  (smell 38/100)</text>
+<text x="16.0" y="1450" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1450" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
+<text x="108.6" y="1450" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Name collides with another tool  [TS-009]</text>
+<text x="16.0" y="1469" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_order&#x27; is a near-duplicate of &#x27;search_orders&#x27; -- an agent could easily call th</text>
+<text x="16.0" y="1488" fill="#abb2bf" font-weight="normal" xml:space="preserve">  e wrong one.</text>
+<text x="16.0" y="1507" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Rename one of the two tools so the names are clearly distinct, or merge them if t</text>
+<text x="16.0" y="1526" fill="#5c6370" font-weight="normal" xml:space="preserve">  hey do the same thing.</text>
+<text x="16.0" y="1545" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1545" fill="#e5c07b" font-weight="normal" xml:space="preserve">  LOW   </text>
+<text x="108.6" y="1545" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Parameter has no description field  [TS-006 | order_id]</text>
+<text x="16.0" y="1564" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_order&#x27; parameter &#x27;order_id&#x27; has no &#x27;description&#x27; in its schema.</text>
+<text x="16.0" y="1583" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a &#x27;description&#x27; to the parameter&#x27;s schema entry.</text>
+<text x="16.0" y="1602" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
+<text x="41.3" y="1602" fill="#5c6370" font-weight="normal" xml:space="preserve">  INFO  </text>
+<text x="108.6" y="1602" fill="#abb2bf" font-weight="normal" xml:space="preserve"> No error guidance  [TS-008]</text>
+<text x="16.0" y="1621" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_order&#x27; description never says what happens on bad input or failure.</text>
+<text x="16.0" y="1640" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Add a sentence about failure behavior: what happens on invalid input, and what th</text>
+<text x="16.0" y="1659" fill="#5c6370" font-weight="normal" xml:space="preserve">  e error looks like.</text>
+<text x="16.0" y="1697" fill="#abb2bf" font-weight="normal" xml:space="preserve">  </text>
+<text x="32.8" y="1697" fill="#e06c75" font-weight="normal" xml:space="preserve">8 medium</text>
+<text x="100.2" y="1697" fill="#abb2bf" font-weight="normal" xml:space="preserve">, </text>
+<text x="117.0" y="1697" fill="#e5c07b" font-weight="normal" xml:space="preserve">7 low</text>
+<text x="159.1" y="1697" fill="#abb2bf" font-weight="normal" xml:space="preserve">, </text>
+<text x="176.0" y="1697" fill="#5c6370" font-weight="normal" xml:space="preserve">4 info</text>
+<text x="226.5" y="1697" fill="#abb2bf" font-weight="normal" xml:space="preserve">   (19 total)</text>
+<text x="16.0" y="1716" fill="#abb2bf" font-weight="normal" xml:space="preserve">  Overall smell score: 79/100</text>
+</svg>

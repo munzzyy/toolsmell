@@ -1,0 +1,37 @@
+{
+  "tools": [
+    {
+      "name": "run",
+      "description": "does stuff",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "search_orders",
+      "description": "This tool searches for orders and also filters them and can sort the results and will export them if you want and it can notify a channel about what it found and it will archive old ones too. It is meant to be the single entry point for anything order related so agents should reach for it whenever a user mentions an order, a shipment, a refund, a customer, a return, a chargeback, or basically anything in the commerce pipeline. Under the hood it talks to three different backend services depending on which combination of options are set, and the exact combination of fields that get populated in the response changes depending on which of those backends answered, so the shape of what comes back is not always the same from one call to the next. Earlier versions of this tool were split into separate search, filter, sort, export, notify, and archive tools, but that turned out to be too many similarly named things for an agent to keep straight, so they were folded into this one tool instead, which mostly solved that problem but introduced a new one where now a single call can quietly do six different things depending on which parameters happen to be set, and it is not always obvious from the parameter names alone which combination is safe to use together or what happens if you set several of them at once. There is a lot more nuance to the query syntax than the parameter names suggest, including date ranges, fuzzy matching on customer name, and a legacy status code system that predates the current one and is still accepted for backward compatibility with a couple of internal dashboards nobody has gotten around to migrating yet, so do not be surprised if you see both the old and new status vocabulary show up in different parts of a response depending on which era the underlying order was created in and which service ultimately resolved the request this time around.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "filters": { "type": "object" },
+          "mode": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "search_order",
+      "description": "Look up a single order by its order ID and return the order's status, line items, and shipping address.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "order_id": { "type": "string" }
+        },
+        "required": ["order_id"]
+      }
+    }
+  ]
+}
