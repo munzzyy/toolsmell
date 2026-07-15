@@ -1,0 +1,5 @@
+- id: toolsmell
+  name: toolsmell (MCP tool-description lint)
+  entry: toolsmell
+  language: python
+  files: .*tools.*\.json$
