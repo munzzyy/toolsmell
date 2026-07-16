@@ -7,13 +7,14 @@ name = "toolsmell"
 version = "0.1.0"
 description = "Lint an MCP server's tool descriptions and JSON schemas for smells that make agents use the tools worse."
 readme = "README.md"
-license = { text = "Prosperity Public License 3.0.0" }
+license = { text = "MIT" }
 requires-python = ">=3.9"
 authors = [{ name = "Cole Munz" }]
 dependencies = []
 keywords = ["mcp", "model-context-protocol", "linter", "static-analysis",
             "tool-descriptions", "json-schema", "agent-tools", "quality"]
 classifiers = [
+    "License :: OSI Approved :: MIT License",
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
