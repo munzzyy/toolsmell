@@ -74,6 +74,32 @@ class Reporting(unittest.TestCase):
         text = render_human(r, color=False)
         self.assertIn("no smells found", text)
 
+    def test_escape_sequence_in_tool_name_is_stripped(self):
+        # A manifest is untrusted input; a name crafted to smuggle a raw
+        # ANSI escape shouldn't get to run in whoever's terminal is linting
+        # it. This is toolsmell's own SECURITY.md threat model, not a new
+        # requirement --stdio introduces.
+        r = lint({"name": "a\033[31mRED\033[0mtool"})
+        text = render_human(r, color=False)
+        self.assertNotIn("\033", text)
+
+    def test_escape_sequence_in_param_name_is_stripped(self):
+        r = lint({"name": "a", "inputSchema": {
+            "type": "object",
+            "properties": {"x\033[31m": {"type": "string"}},
+        }})
+        text = render_human(r, color=False)
+        self.assertNotIn("\033", text)
+
+    def test_json_output_already_escapes_control_characters(self):
+        # render_json goes through json.dumps, which escapes control
+        # characters per the JSON spec -- no separate stripping needed
+        # there. This test pins that assumption down.
+        r = lint({"name": "a\033[31m"})
+        payload = json.loads(render_json(r))
+        self.assertNotIn("\033", render_json(r))
+        self.assertEqual(payload["tools"][0]["name"], "a\033[31m")
+
 
 class CLI(unittest.TestCase):
     def _run(self, argv):

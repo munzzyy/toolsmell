@@ -14,9 +14,10 @@ easily call the wrong one of.
 
 toolsmell is a static linter for MCP tool definitions: point it at a
 server's `tools/list` output and it flags description and JSON Schema
-smells that make an agent pick the wrong tool or call it wrong. It never
-runs anything and never talks to a server or the network -- it just reads
-the manifest.
+smells that make an agent pick the wrong tool or call it wrong. By default
+it just reads a JSON file off disk and runs nothing. `--stdio` is the one
+opt-in exception -- it spawns a real MCP server so you don't have to hand-build
+the manifest yourself; see [Getting the manifest](#getting-the-manifest).
 
 ## Why
 
@@ -98,8 +99,13 @@ Once it's on PyPI: `pipx install toolsmell`.
 toolsmell ./tools.json              # a {"tools": [...]} manifest, the shape tools/list returns
 toolsmell ./tools.json --json       # machine-readable output
 toolsmell ./tools.json --max-score 30   # tighten the failing threshold (default 50)
+toolsmell --stdio "python my_server.py"   # spawn a live MCP server and lint its real response
 toolsmell --list-rules              # print every rule id and exit
 ```
+
+`--stdio` is the only thing in toolsmell that runs a subprocess. Only point
+it at a server you already trust to execute -- see
+[Getting the manifest](#getting-the-manifest) for the full trust model.
 
 `--max-score N` fails the run (exit 1) if the overall smell score is at or
 above `N`. That's the whole CI story:
@@ -110,12 +116,38 @@ above `N`. That's the whole CI story:
 
 ## Getting the manifest
 
-toolsmell only reads a static `tools/list` response -- a JSON file shaped
-`{"tools": [...]}`. Most MCP servers define their tools in code, not as a
-file sitting on disk, so there's usually no `tools.json` lying around to
-point at. Call the server's `tools/list` method once and save what comes
-back, or paste the tools array into a file by hand -- either way, once it's
-JSON on disk, toolsmell can lint it.
+Most MCP servers define their tools in code, not as a file sitting on
+disk, so there's usually no `tools.json` lying around to point at. Two
+ways to get one:
+
+**`--stdio` (the easy way).** Point toolsmell at the command that starts
+your server and it does the rest -- spawns it, speaks just enough of the
+MCP handshake (`initialize`, then `tools/list`) over its stdin/stdout, and
+lints whatever comes back:
+
+```bash
+toolsmell --stdio "python my_server.py"
+toolsmell --stdio "node server.js --port 0"
+```
+
+This is the one thing in toolsmell that executes a subprocess, so it's
+opt-in and worth being deliberate about: **only point `--stdio` at a server
+you already trust to run.** The command is split with `shlex` and exec'd as
+a real argv list -- never a shell -- so there's no shell-injection surface
+in the command string itself, but the process still genuinely starts and
+runs. Don't wire `--stdio` up to a command string that comes from a PR
+description, an issue body, or any other untrusted input; that's handing
+an attacker a way to pick what gets executed on your machine. The server's
+`tools/list` response is treated as untrusted the same way a manifest file
+already is -- it's data, not code, and it goes through the exact same
+parser. toolsmell also enforces a wall-clock timeout on the whole exchange
+and a size cap on the response, and kills the process afterward either way,
+so a hung or misbehaving server can't wedge the run.
+
+**A static file (the manual way).** Call the server's `tools/list` method
+yourself and save what comes back, or paste the tools array into a file by
+hand -- either way, once it's JSON on disk, `toolsmell ./tools.json` lints
+it exactly the same.
 
 ## pre-commit
 
@@ -156,11 +188,14 @@ its severity, and how to fix it.
 
 - It's a static linter, not a security scanner. It never looks for prompt
   injection, dangerous commands, or secrets -- that's a different tool's job.
-- It's not a runtime tester. It never calls the tool, never talks to the
-  MCP server, and never touches the network.
-- It only reads the shape `tools/list` returns: a JSON file with a `tools`
-  array of `{name, description, inputSchema}`. A Python file exporting a
-  tool list is out of scope -- export it to JSON first.
+- It's not a runtime tester. Even with `--stdio` running the server for
+  real, toolsmell only ever calls `tools/list` -- it never calls an actual
+  tool, and it never touches the network (stdio is a local pipe, not a
+  socket).
+- It only lints the shape `tools/list` returns: a `tools` array of
+  `{name, description, inputSchema}`, whether that comes from a JSON file
+  or a live `--stdio` server. A Python file exporting a tool list with
+  nothing willing to speak MCP over stdio is out of scope.
 - The severities and thresholds are toolsmell's own judgment calls, not a
   formula from the paper that motivated it. Tune `--max-score` to your
   server; a clean score means nothing obvious tripped, not that the
@@ -170,8 +205,9 @@ its severity, and how to fix it.
 
 - `0` -- the overall smell score is under `--max-score` (default 50).
 - `1` -- the score is at or above `--max-score`.
-- `2` -- usage error: no target given, the file doesn't exist, or it isn't
-  a valid tools manifest.
+- `2` -- usage error: no target given, the file doesn't exist, it isn't a
+  valid tools manifest, or (with `--stdio`) the server couldn't be reached,
+  timed out, or sent back something that isn't a valid response.
 
 ## Contributing
 
