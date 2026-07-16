@@ -184,3 +184,7 @@ caught, or a clean one that must stay quiet) so coverage only goes up. See
 ## License
 
 MIT — free to use, change, and ship, commercial or not. See [LICENSE](LICENSE).
+
+## Support
+
+If toolsmell made your tools easier for agents to use, [sponsoring](https://github.com/sponsors/munzzyy) is what keeps it maintained.
