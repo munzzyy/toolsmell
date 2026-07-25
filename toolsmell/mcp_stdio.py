@@ -168,7 +168,7 @@ def _split_command(command: str) -> list:
     argv = shlex.split(command, posix=(os.name != "nt"))
     if os.name == "nt":
         argv = [
-            tok[1:-1] if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"' else tok
+            tok[1:-1] if len(tok) >= 2 and tok[0] in "\"'" and tok[-1] == tok[0] else tok
             for tok in argv
         ]
     return argv
