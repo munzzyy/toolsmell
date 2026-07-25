@@ -173,18 +173,39 @@ class CLI(unittest.TestCase):
         code, out = self._run([p, "--json"])
         self.assertIsInstance(json.loads(out), dict)
 
-    def test_max_tool_score_catches_a_tool_buried_by_the_mean(self):
-        # Many clean tools plus one with no description: the mean stays low
-        # and passes --max-score, but --max-tool-score must fail the run.
+    def _mostly_clean_manifest(self, extra=None):
+        # A dozen clean tools; the mean stays near zero. Append `extra` to add
+        # one bad tool without dragging the average past the default gate.
         tools = [{"name": f"tool_{c*3}",
                   "description": "Fetches record and returns it as JSON, error if missing."}
                  for c in "abcdefghijkl"]
-        tools.append({"name": "worst_tool_ever", "description": ""})
-        p = self._write({"tools": tools})
+        if extra is not None:
+            tools.append(extra)
+        return {"tools": tools}
+
+    def test_max_tool_score_catches_a_tool_buried_by_the_mean(self):
+        # Many clean tools plus one with no description: the mean stays low
+        # and passes --max-score, but --max-tool-score must fail the run and
+        # name the offending tool.
+        p = self._write(self._mostly_clean_manifest(
+            extra={"name": "worst_tool_ever", "description": ""}))
         code, _ = self._run([p, "--no-color"])
         self.assertEqual(code, 0)  # mean buries it under the default gate
-        code, _ = self._run([p, "--no-color", "--max-tool-score", "25"])
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, _ = self._run([p, "--no-color", "--max-tool-score", "25"])
         self.assertEqual(code, 1)
+        self.assertIn("worst_tool_ever", err.getvalue())
+
+    def test_max_tool_score_passes_when_every_tool_is_under(self):
+        # Same flag and threshold, but every tool is clean: the per-tool gate
+        # must not fire, and nothing should be named as tripping it.
+        p = self._write(self._mostly_clean_manifest())
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, _ = self._run([p, "--no-color", "--max-tool-score", "25"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("--max-tool-score", err.getvalue())
 
     def test_missing_path_exit_two(self):
         code, _ = self._run(["/no/such/path.json"])

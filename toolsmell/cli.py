@@ -11,7 +11,7 @@ from .catalog import all_rules
 from .lint import lint_data, lint_path
 from .manifest import ManifestError
 from .mcp_stdio import StdioError, fetch_tools_via_stdio
-from .report import render_human, render_json, render_json_multi
+from .report import _clean, render_human, render_json, render_json_multi
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -48,15 +48,34 @@ def _print_rules() -> None:
         print(f"{r.id}  [{r.severity.label:>6}]  {r.title}")
 
 
+def _tools_over_limit(result, args):
+    """Tools whose own score is at or above --max-tool-score, or an empty list
+    when the flag is off. The overall score is a mean, so one bad tool can hide
+    under a passing --max-score -- this is what the per-tool gate catches."""
+    if args.max_tool_score is None:
+        return []
+    return [t for t in result.tools if t.score >= args.max_tool_score]
+
+
 def _should_fail(result, args) -> bool:
     """Whether a lint result trips a configured gate: the overall mean score,
     or (when set) any single tool's score."""
     if result.score >= args.max_score:
         return True
-    if args.max_tool_score is not None and any(
-            t.score >= args.max_tool_score for t in result.tools):
-        return True
-    return False
+    return bool(_tools_over_limit(result, args))
+
+
+def _print_gate_trip(result, args) -> None:
+    """Name the tool(s) whose own score tripped --max-tool-score, so a failing
+    CI run points at the tool to fix instead of just exiting 1. Goes to stderr
+    so it never lands in the --json document or the report piped on stdout.
+    Tool names are run through _clean first -- a manifest is untrusted input."""
+    over = _tools_over_limit(result, args)
+    if not over:
+        return
+    names = ", ".join(f"{_clean(t.name)} (smell {t.score})" for t in over)
+    print(f"toolsmell: {len(over)} tool(s) at or above --max-tool-score "
+          f"{args.max_tool_score}: {names}", file=sys.stderr)
 
 
 def _report(result, args, color: bool) -> bool:
@@ -65,6 +84,7 @@ def _report(result, args, color: bool) -> bool:
         print(render_json(result))
     else:
         print(render_human(result, color=color))
+    _print_gate_trip(result, args)
     return _should_fail(result, args)
 
 
@@ -118,6 +138,8 @@ def main(argv=None) -> int:
     # emitting a bare object, so existing consumers are unaffected.
     if args.json and len(results) > 1:
         print(render_json_multi(results))
+        for result in results:
+            _print_gate_trip(result, args)
     else:
         for result in results:
             _report(result, args, color)

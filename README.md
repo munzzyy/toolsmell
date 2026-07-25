@@ -99,6 +99,7 @@ Once it's on PyPI: `pipx install toolsmell`.
 toolsmell ./tools.json              # a {"tools": [...]} manifest, the shape tools/list returns
 toolsmell ./tools.json --json       # machine-readable output
 toolsmell ./tools.json --max-score 30   # tighten the failing threshold (default 50)
+toolsmell ./tools.json --max-tool-score 40   # also fail if any single tool is this smelly
 toolsmell --stdio "python my_server.py"   # spawn a live MCP server and lint its real response
 toolsmell --list-rules              # print every rule id and exit
 ```
@@ -113,6 +114,11 @@ above `N`. That's the whole CI story:
 ```yaml
 - run: pipx run toolsmell ./tools.json --max-score 30
 ```
+
+The overall score is a mean, so a mostly-clean server can bury one bad tool
+under a passing `--max-score`. `--max-tool-score N` closes that gap: it fails
+the run if any single tool scores at or above `N`, and prints which tool(s)
+tripped it (on stderr) so a red CI run points straight at what to fix.
 
 ## Getting the manifest
 
