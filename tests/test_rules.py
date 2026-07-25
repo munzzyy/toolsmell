@@ -105,6 +105,31 @@ class UndocumentedParam(unittest.TestCase):
                                          "properties": {"item_id": {"type": "string"}}})
         self.assertNotIn("TS-005", _ids(schema.check(t, [t])))
 
+    def test_short_name_inside_a_word_is_not_a_mention(self):
+        # 'id' is a substring of 'Provide' but the param is never really
+        # documented, so it must still be flagged.
+        t = mk_tool(
+            "get_user",
+            description="Provide a user record and return its fields as JSON.",
+            schema={"type": "object", "properties": {"id": {"type": "string"}}})
+        self.assertIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_short_name_as_a_whole_word_counts_as_mentioned(self):
+        t = mk_tool(
+            "get_user",
+            description="Fetches the user with the given id and returns the record.",
+            schema={"type": "object", "properties": {"id": {"type": "string"}}})
+        self.assertNotIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_param_in_a_composed_subschema_is_still_checked(self):
+        # Params tucked under allOf must be linted like top-level ones, or
+        # the rules fail open on the composed shape.
+        t = mk_tool(
+            "composed", description="Does a thing with several inputs and returns JSON.",
+            schema={"type": "object", "allOf": [
+                {"properties": {"undoc": {"type": "string"}}}]})
+        self.assertIn("TS-005", _ids(schema.check(t, [t])))
+
 
 class ParamNoDescription(unittest.TestCase):
     def test_missing_param_description_fires(self):
@@ -117,6 +142,23 @@ class ParamNoDescription(unittest.TestCase):
             "type": "object",
             "properties": {"x": {"type": "string", "description": "The x value."}}})
         self.assertNotIn("TS-006", _ids(schema.check(t, [t])))
+
+    def test_ref_with_description_in_defs_does_not_fire(self):
+        # A $ref param whose referenced $defs entry carries a description is
+        # documented; resolving the ref must not report a bogus TS-006.
+        t = mk_tool("t", description="x", schema={
+            "type": "object",
+            "properties": {"location": {"$ref": "#/$defs/Location"}},
+            "$defs": {"Location": {"type": "string",
+                                   "description": "The location to search for."}}})
+        self.assertNotIn("TS-006", _ids(schema.check(t, [t])))
+
+    def test_ref_without_description_still_fires(self):
+        t = mk_tool("t", description="x", schema={
+            "type": "object",
+            "properties": {"location": {"$ref": "#/$defs/Location"}},
+            "$defs": {"Location": {"type": "string"}}})
+        self.assertIn("TS-006", _ids(schema.check(t, [t])))
 
 
 class RequiredMissing(unittest.TestCase):
@@ -132,6 +174,20 @@ class RequiredMissing(unittest.TestCase):
 
     def test_no_properties_does_not_fire(self):
         t = mk_tool("t", description="d", schema={"type": "object", "properties": {}})
+        self.assertNotIn("TS-007", _ids(schema.check(t, [t])))
+
+    def test_non_list_required_still_fires(self):
+        # "required": true is malformed -- it is not a usable required list,
+        # so the rule must still fire instead of going silent.
+        t = mk_tool("t", description="d", schema={
+            "type": "object", "properties": {"x": {"type": "string"}},
+            "required": True})
+        self.assertIn("TS-007", _ids(schema.check(t, [t])))
+
+    def test_required_list_in_composed_branch_does_not_fire(self):
+        t = mk_tool("t", description="d", schema={
+            "type": "object", "allOf": [
+                {"properties": {"x": {"type": "string"}}, "required": ["x"]}]})
         self.assertNotIn("TS-007", _ids(schema.check(t, [t])))
 
 
@@ -170,6 +226,17 @@ class NameCollision(unittest.TestCase):
         a = mk_tool("get", description="d")
         b = mk_tool("get_users", description="d", index=1)
         self.assertNotIn("TS-009", _ids(naming.check(a, [a, b])))
+
+    def test_bounded_levenshtein_matches_unbounded_verdict(self):
+        # The early-abandon in _levenshtein is a speedup, not a behavior
+        # change: for the distances the rule cares about it must agree with
+        # the full computation, at and over the threshold.
+        pairs = [("get_invoice", "get_invoicee"), ("alpha", "omega"),
+                 ("abcdefghij", "abcdefghij"), ("abcdefghij", "zyxwvutsrq")]
+        for a, b in pairs:
+            with self.subTest(pair=(a, b)):
+                full = naming._levenshtein(a, b)
+                self.assertEqual((full <= 2), (naming._levenshtein(a, b, 2) <= 2))
 
 
 class MissingExample(unittest.TestCase):
@@ -253,6 +320,27 @@ class EnumWorthyFreeText(unittest.TestCase):
                 "description": "One of '1', '2', or '3', loosely.",
             }}})
         self.assertNotIn("TS-012", _ids(schema.check(t, [t])))
+
+    def test_nullable_type_array_still_fires(self):
+        # ["string", "null"] is a nullable string; the enum-worthy check must
+        # see through the nullable wrapper.
+        t = mk_tool("t", description="d", schema={
+            "type": "object",
+            "properties": {"order": {
+                "type": ["string", "null"],
+                "description": "Sort order: 'asc', 'desc', or 'random'.",
+            }}})
+        self.assertIn("TS-012", _ids(schema.check(t, [t])))
+
+    def test_anyof_nullable_string_still_fires(self):
+        # The Optional[str] shape FastMCP/pydantic emit.
+        t = mk_tool("t", description="d", schema={
+            "type": "object",
+            "properties": {"order": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "description": "Sort order: 'asc', 'desc', or 'random'.",
+            }}})
+        self.assertIn("TS-012", _ids(schema.check(t, [t])))
 
     def test_plain_prose_does_not_fire(self):
         t = mk_tool("t", description="d", schema={

@@ -200,11 +200,18 @@ its severity, and how to fix it.
   formula from the paper that motivated it. Tune `--max-score` to your
   server; a clean score means nothing obvious tripped, not that the
   description is great prose.
+- The text checks assume English. The word lists (return words, error
+  words, vague verbs) and the word-count heuristic are English-only, so a
+  well-written description in another language can pick up false positives
+  like "never says what it returns". Read a non-English manifest's findings
+  with that in mind.
 
 ## Exit codes
 
-- `0` -- the overall smell score is under `--max-score` (default 50).
-- `1` -- the score is at or above `--max-score`.
+- `0` -- the overall smell score is under `--max-score` (default 50), and
+  no single tool trips `--max-tool-score` if you set it.
+- `1` -- the overall score is at or above `--max-score`, or a single tool is
+  at or above `--max-tool-score`.
 - `2` -- usage error: no target given, the file doesn't exist, it isn't a
   valid tools manifest, or (with `--stdio`) the server couldn't be reached,
   timed out, or sent back something that isn't a valid response.

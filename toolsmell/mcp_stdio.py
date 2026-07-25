@@ -17,6 +17,7 @@ it.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import shlex
 import subprocess
@@ -44,6 +45,11 @@ PROCESS_TIMEOUT = 20.0
 READ_TIMEOUT = 10.0
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
+
+# A real server lists its tools in a handful of pages at most. Cap the
+# follow-the-cursor loop so a hostile server that always returns a fresh
+# nextCursor can't keep the client paging forever.
+MAX_LIST_PAGES = 50
 
 
 class StdioError(Exception):
@@ -154,6 +160,20 @@ def _kill(proc: "subprocess.Popen") -> None:
             pass
 
 
+def _split_command(command: str) -> list:
+    """Split a --stdio command string into an argv list. Split posix
+    everywhere except Windows, where posix mode eats the backslashes in a
+    path like `python C:\\mcp\\server.py`; there, split non-posix and strip
+    the surrounding double quotes non-posix leaves attached to a token."""
+    argv = shlex.split(command, posix=(os.name != "nt"))
+    if os.name == "nt":
+        argv = [
+            tok[1:-1] if len(tok) >= 2 and tok[0] == '"' and tok[-1] == '"' else tok
+            for tok in argv
+        ]
+    return argv
+
+
 def fetch_tools_via_stdio(command: str) -> dict:
     """Spawn `command`, speak the minimal MCP handshake over its stdio, and
     return the parsed tools/list result. The result is still untrusted --
@@ -164,7 +184,7 @@ def fetch_tools_via_stdio(command: str) -> dict:
     shell involved in launching it, ever.
     """
     try:
-        argv = shlex.split(command)
+        argv = _split_command(command)
     except ValueError as e:
         raise StdioError(f"cannot parse --stdio command: {e}")
     if not argv:
@@ -193,13 +213,37 @@ def fetch_tools_via_stdio(command: str) -> dict:
 
         _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
 
-        _send(proc, {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
-        list_response = _recv_response(reader, deadline, 2)
-        _check_error(list_response, "tools/list")
+        tools = []
+        cursor = None
+        request_id = 2
+        seen_cursors = set()
+        for _ in range(MAX_LIST_PAGES):
+            params = {} if cursor is None else {"cursor": cursor}
+            _send(proc, {"jsonrpc": "2.0", "id": request_id, "method": "tools/list",
+                         "params": params})
+            list_response = _recv_response(reader, deadline, request_id)
+            _check_error(list_response, "tools/list")
+            result = list_response.get("result")
+            if not isinstance(result, dict):
+                raise StdioError("tools/list response has no 'result' object")
+            page = result.get("tools")
+            if isinstance(page, list):
+                tools.extend(page)
+            # tools/list is paginated: a string nextCursor means fetch the
+            # next page with it. Stop on anything else, and refuse to loop
+            # on a repeated cursor (a server stuck or lying about progress).
+            next_cursor = result.get("nextCursor")
+            if not isinstance(next_cursor, str) or not next_cursor:
+                break
+            if next_cursor in seen_cursors:
+                raise StdioError("server repeated a tools/list cursor")
+            seen_cursors.add(next_cursor)
+            cursor = next_cursor
+            request_id += 1
+        else:
+            raise StdioError(
+                f"server paginated tools/list past {MAX_LIST_PAGES} pages")
     finally:
         _kill(proc)
 
-    result = list_response.get("result")
-    if not isinstance(result, dict):
-        raise StdioError("tools/list response has no 'result' object")
-    return result
+    return {"tools": tools}

@@ -91,6 +91,20 @@ class Reporting(unittest.TestCase):
         text = render_human(r, color=False)
         self.assertNotIn("\033", text)
 
+    def test_bidi_and_zero_width_chars_are_escaped_not_passed_through(self):
+        # A right-to-left override or zero-width char in a name can make
+        # 'delete‮gpj.report' render as an innocent 'deletetroper.jpg'
+        # in the terminal. Those must be escaped to visible \\uXXXX, not
+        # emitted raw (Cc stripping alone misses the Cf category).
+        rlo, zwsp = "‮", "​"
+        r = lint({"name": "delete" + rlo + "gpj.report"},
+                 {"name": "fetch_data" + zwsp})
+        text = render_human(r, color=False)
+        self.assertNotIn(rlo, text)
+        self.assertNotIn(zwsp, text)
+        self.assertIn("\\u202e", text)
+        self.assertIn("\\u200b", text)
+
     def test_json_output_already_escapes_control_characters(self):
         # render_json goes through json.dumps, which escapes control
         # characters per the JSON spec -- no separate stripping needed
@@ -143,6 +157,34 @@ class CLI(unittest.TestCase):
         p = self._write({"tools": [{"name": "a", "description": "d"}]})
         code, out = self._run([p, "--json"])
         json.loads(out)
+
+    def test_multi_file_json_is_a_single_parseable_array(self):
+        # Two files with --json used to print concatenated objects that
+        # json.load rejects; it must be one array now.
+        p1 = self._write({"tools": [{"name": "a", "description": "d"}]})
+        p2 = self._write(self._smelly_manifest())
+        code, out = self._run([p1, p2, "--json"])
+        payload = json.loads(out)
+        self.assertIsInstance(payload, list)
+        self.assertEqual(len(payload), 2)
+
+    def test_single_file_json_stays_a_bare_object(self):
+        p = self._write({"tools": [{"name": "a", "description": "d"}]})
+        code, out = self._run([p, "--json"])
+        self.assertIsInstance(json.loads(out), dict)
+
+    def test_max_tool_score_catches_a_tool_buried_by_the_mean(self):
+        # Many clean tools plus one with no description: the mean stays low
+        # and passes --max-score, but --max-tool-score must fail the run.
+        tools = [{"name": f"tool_{c*3}",
+                  "description": "Fetches record and returns it as JSON, error if missing."}
+                 for c in "abcdefghijkl"]
+        tools.append({"name": "worst_tool_ever", "description": ""})
+        p = self._write({"tools": tools})
+        code, _ = self._run([p, "--no-color"])
+        self.assertEqual(code, 0)  # mean buries it under the default gate
+        code, _ = self._run([p, "--no-color", "--max-tool-score", "25"])
+        self.assertEqual(code, 1)
 
     def test_missing_path_exit_two(self):
         code, _ = self._run(["/no/such/path.json"])

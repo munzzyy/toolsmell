@@ -46,6 +46,36 @@ def run_ok() -> None:
     _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
 
 
+def _paging_tool(name: str) -> dict:
+    return {"name": name, "description": "Handles requests.",
+            "inputSchema": {"type": "object", "properties": {}}}
+
+
+# Three tools spread across three pages, keyed by the cursor the client
+# echoes back. The last page has no nextCursor, which ends the loop.
+_PAGES = {
+    None: {"tools": [_paging_tool("alpha_tool")], "nextCursor": "page2"},
+    "page2": {"tools": [_paging_tool("beta_tool")], "nextCursor": "page3"},
+    "page3": {"tools": [_paging_tool("gamma_tool")]},
+}
+
+
+def run_paging() -> None:
+    init = _read_request()
+    _write({"jsonrpc": "2.0", "id": init["id"], "result": {
+        "protocolVersion": "2024-11-05", "capabilities": {},
+        "serverInfo": {"name": "fake-mcp-server", "version": "0"},
+    }})
+    sys.stdin.readline()  # notifications/initialized -- no response expected
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return
+        request = json.loads(line)
+        cursor = (request.get("params") or {}).get("cursor")
+        _write({"jsonrpc": "2.0", "id": request["id"], "result": _PAGES[cursor]})
+
+
 def run_hang() -> None:
     # Reads and writes nothing, ever. Proves the client's read timeout
     # fires instead of blocking forever.
@@ -78,6 +108,7 @@ def run_oversized() -> None:
 
 _MODES = {
     "ok": run_ok,
+    "paging": run_paging,
     "hang": run_hang,
     "exit": run_exit,
     "malformed": run_malformed,

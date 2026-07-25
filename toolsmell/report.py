@@ -17,12 +17,30 @@ _RESET = "\033[0m"
 
 
 def _clean(s: str) -> str:
-    """Strip control characters -- including a raw ANSI escape -- out of
-    text that ultimately comes from the manifest before it reaches a
-    terminal. A manifest is untrusted input, and a tool name or description
-    crafted to smuggle escape sequences into whoever's terminal is linting
-    it is exactly the kind of thing this tool exists to be fed."""
-    return "".join(ch for ch in s if ch in ("\t", "\n") or unicodedata.category(ch) != "Cc")
+    """Neutralize text that ultimately comes from the manifest before it
+    reaches a terminal. A manifest is untrusted input, and a tool name or
+    description crafted to smuggle escape sequences into whoever's terminal
+    is linting it is exactly the kind of thing this tool exists to be fed.
+
+    Control characters (Cc, e.g. a raw ANSI escape) are dropped. Format and
+    line/paragraph separators (Cf/Zl/Zp -- right-to-left overrides,
+    zero-width joiners, and the like) are escaped to \\uXXXX rather than
+    dropped, so a name spoofed with bidi or invisible characters shows up as
+    visibly weird instead of being silently normalized into something that
+    renders as an innocent string. Tab and newline are kept as-is."""
+    out = []
+    for ch in s:
+        if ch in ("\t", "\n"):
+            out.append(ch)
+            continue
+        cat = unicodedata.category(ch)
+        if cat == "Cc":
+            continue
+        if cat in ("Cf", "Zl", "Zp"):
+            out.append(f"\\u{ord(ch):04x}")
+            continue
+        out.append(ch)
+    return "".join(out)
 
 
 def render_human(result, color: bool = True) -> str:
@@ -60,9 +78,9 @@ def render_human(result, color: bool = True) -> str:
     return "\n".join(lines)
 
 
-def render_json(result) -> str:
+def _json_payload(result) -> dict:
     counts = result.counts()
-    payload = {
+    return {
         "tool": "toolsmell",
         "version": __version__,
         "source": result.source,
@@ -87,4 +105,14 @@ def render_json(result) -> str:
             for t in result.tools
         ],
     }
-    return json.dumps(payload, indent=2)
+
+
+def render_json(result) -> str:
+    return json.dumps(_json_payload(result), indent=2)
+
+
+def render_json_multi(results) -> str:
+    """One JSON array covering several linted files. Printing one
+    render_json document per file would emit concatenated objects that
+    json.load / JSON.parse reject; an array is a single valid document."""
+    return json.dumps([_json_payload(r) for r in results], indent=2)

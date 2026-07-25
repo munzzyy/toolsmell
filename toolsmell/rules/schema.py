@@ -65,7 +65,7 @@ def check(tool, all_tools) -> list:
                    "mandatory."))
 
     for p in params:
-        if p.type == "string" and not p.has_enum and _looks_enum_worthy(p.description):
+        if "string" in p.type_set and not p.has_enum and _looks_enum_worthy(p.description):
             findings.append(catalog.build(
                 "TS-012", tool=tool.name, param=p.name,
                 detail=f"'{tool.name}' parameter '{p.name}' spells out "

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import toolsmell.mcp_stdio as mcp_stdio
 from toolsmell import cli
@@ -52,6 +53,14 @@ class FetchToolsViaStdio(unittest.TestCase):
         result = fetch_tools_via_stdio(_cmd("ok"))
         tools = parse_tools(result)
         self.assertEqual(tools[0].name, "get_weather")
+
+    def test_paging_server_returns_every_page(self):
+        # A spec-compliant server splits its tools across pages with
+        # nextCursor. The client must follow the cursor, not lint only the
+        # first page and silently drop the rest.
+        result = fetch_tools_via_stdio(_cmd("paging"))
+        names = [t["name"] for t in result["tools"]]
+        self.assertEqual(names, ["alpha_tool", "beta_tool", "gamma_tool"])
 
     def test_hanging_server_times_out(self):
         with _FastTimeouts(), self.assertRaises(StdioError):
@@ -91,6 +100,27 @@ class FetchToolsViaStdio(unittest.TestCase):
             fetch_tools_via_stdio(f"echo hi; touch {shlex.quote(str(marker))}")
         self.assertFalse(marker.exists(),
                           "a shell would have run `touch` here; shlex+argv must not")
+
+
+class SplitCommand(unittest.TestCase):
+    """_split_command must not eat the backslashes in a Windows path. shlex
+    is pure Python, so forcing os.name exercises the real Windows behavior on
+    any platform."""
+
+    def test_windows_keeps_backslashes_in_a_path(self):
+        with mock.patch.object(mcp_stdio.os, "name", "nt"):
+            argv = mcp_stdio._split_command(r"python C:\Users\cole\mcp\server.py")
+        self.assertEqual(argv, ["python", r"C:\Users\cole\mcp\server.py"])
+
+    def test_windows_strips_wrapping_double_quotes(self):
+        with mock.patch.object(mcp_stdio.os, "name", "nt"):
+            argv = mcp_stdio._split_command(r'python "C:\Program Files\mcp\server.py"')
+        self.assertEqual(argv, ["python", r"C:\Program Files\mcp\server.py"])
+
+    def test_posix_split_is_unchanged(self):
+        with mock.patch.object(mcp_stdio.os, "name", "posix"):
+            argv = mcp_stdio._split_command("python /home/cole/server.py --flag x")
+        self.assertEqual(argv, ["python", "/home/cole/server.py", "--flag", "x"])
 
 
 class KillHelper(unittest.TestCase):
