@@ -102,6 +102,32 @@ class FetchToolsViaStdio(unittest.TestCase):
                           "a shell would have run `touch` here; shlex+argv must not")
 
 
+class ServerStderr(unittest.TestCase):
+    """A server that dies on startup used to produce one useless line. The
+    real cause is on its stderr, so the error has to carry it."""
+
+    def test_startup_failure_quotes_the_server_stderr(self):
+        with self.assertRaises(StdioError) as ctx:
+            fetch_tools_via_stdio(_cmd("startup-failure"))
+        message = str(ctx.exception)
+        self.assertIn("mcp_does_not_exist", message)
+        self.assertIn("status 3", message)
+
+    def test_stderr_tail_is_bounded(self):
+        with self.assertRaises(StdioError) as ctx:
+            fetch_tools_via_stdio(_cmd("stderr-flood"))
+        message = str(ctx.exception)
+        self.assertIn("flood-line-", message)
+        self.assertLess(len(message), mcp_stdio.STDERR_TAIL_CHARS + 500,
+                        "a chatty server must not paste its whole log into the error")
+
+    def test_a_healthy_server_says_nothing_extra(self):
+        # The stderr channel only shows up on a failure path; a good run must
+        # not grow a "server stderr:" section out of nowhere.
+        result = fetch_tools_via_stdio(_cmd("ok"))
+        self.assertEqual(result["tools"][0]["name"], "get_weather")
+
+
 class SplitCommand(unittest.TestCase):
     """_split_command must not eat the backslashes in a Windows path. shlex
     is pure Python, so forcing os.name exercises the real Windows behavior on

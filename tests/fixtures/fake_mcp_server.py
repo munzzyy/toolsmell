@@ -106,8 +106,29 @@ def run_oversized() -> None:
     time.sleep(3600)
 
 
+def run_startup_failure() -> None:
+    # The shape of the most common --stdio failure: the server never gets
+    # far enough to speak the protocol, and the only explanation goes to
+    # stderr. Written without a trailing newline on purpose -- a real
+    # traceback cut short still has to reach the user.
+    sys.stderr.write("ModuleNotFoundError: No module named 'mcp_does_not_exist'")
+    sys.stderr.flush()
+    sys.exit(3)
+
+
+def run_stderr_flood() -> None:
+    # A server that logs relentlessly on its way down. The client must quote
+    # a readable tail, not paste a megabyte of logging into one error.
+    for i in range(5000):
+        sys.stderr.write(f"flood-line-{i}\n")
+    sys.stderr.flush()
+    sys.exit(1)
+
+
 _MODES = {
     "ok": run_ok,
+    "startup-failure": run_startup_failure,
+    "stderr-flood": run_stderr_flood,
     "paging": run_paging,
     "hang": run_hang,
     "exit": run_exit,

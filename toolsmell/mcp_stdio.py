@@ -51,6 +51,19 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 # nextCursor can't keep the client paging forever.
 MAX_LIST_PAGES = 50
 
+# The child's stderr is captured so a server that dies on startup can say
+# why, but it gets the same bounded treatment as its stdout -- a chatty
+# server must not be able to fill memory through the diagnostic channel.
+MAX_STDERR_BYTES = 65_536
+STDERR_TAIL_LINES = 20
+STDERR_TAIL_CHARS = 4_000
+
+# How long to wait for the stderr reader to catch up once the exchange has
+# already failed. A server that dies during startup usually writes its
+# traceback microseconds before the client notices, so a short grace period
+# is the difference between quoting the real cause and quoting nothing.
+STDERR_GRACE = 0.5
+
 
 class StdioError(Exception):
     """Raised when a --stdio server can't be launched, times out, or sends
@@ -67,13 +80,16 @@ class _LineReader:
     blocking read works the same on every platform toolsmell's CI covers.
     """
 
-    def __init__(self, stream):
+    def __init__(self, stream, limit=None, flush_partial: bool = False):
         self._stream = stream
+        self._limit = limit
+        self._flush_partial = flush_partial
         self._queue: "queue.Queue" = queue.Queue()
         thread = threading.Thread(target=self._run, daemon=True)
         thread.start()
 
     def _run(self) -> None:
+        limit = MAX_RESPONSE_BYTES if self._limit is None else self._limit
         buf = bytearray()
         total = 0
         try:
@@ -82,7 +98,7 @@ class _LineReader:
                 if not chunk:
                     break
                 total += len(chunk)
-                if total > MAX_RESPONSE_BYTES:
+                if total > limit:
                     self._queue.put(("oversized", None))
                     return
                 buf += chunk
@@ -92,7 +108,32 @@ class _LineReader:
                     self._queue.put(("line", bytes(line)))
         except (OSError, ValueError):
             pass  # the pipe went away, e.g. the process was killed
+        # A traceback cut off before its final newline is still the thing the
+        # user needs to read, so the diagnostic reader keeps the tail. The
+        # protocol reader does not: a half-written JSON line is not a message.
+        if self._flush_partial and buf:
+            self._queue.put(("line", bytes(buf)))
         self._queue.put(("eof", None))
+
+    def drain(self, grace: float = 0.0) -> list:
+        """Every line queued so far, waiting up to `grace` seconds for the
+        stream to close first. Never raises -- this is the path that runs
+        while an error is already being reported, and losing the diagnostic
+        is better than replacing the real error with a second one."""
+        out = []
+        deadline = time.monotonic() + grace
+        while True:
+            wait = max(0.0, deadline - time.monotonic())
+            try:
+                if wait > 0:
+                    kind, payload = self._queue.get(timeout=wait)
+                else:
+                    kind, payload = self._queue.get_nowait()
+            except queue.Empty:
+                return out
+            if kind != "line":
+                return out  # eof, or the reader hit its size cap
+            out.append(payload)
 
     def readline(self, deadline: float) -> bytes:
         """Return the next complete line, waiting at most until `deadline`
@@ -153,11 +194,49 @@ def _kill(proc: "subprocess.Popen") -> None:
         proc.wait(timeout=5.0)
     except subprocess.TimeoutExpired:
         pass
-    for stream in (proc.stdin, proc.stdout):
+    for stream in (proc.stdin, proc.stdout, proc.stderr):
+        if stream is None:
+            continue
         try:
             stream.close()
         except OSError:
             pass
+
+
+def _stderr_tail(reader: _LineReader) -> str:
+    """The last few lines the server wrote to stderr, indented for the error
+    message. Bounded in lines and characters on top of the reader's own byte
+    cap, so a server that logs a megabyte before dying still produces a
+    readable error."""
+    lines = [line.decode("utf-8", "replace").rstrip("\r")
+             for line in reader.drain(STDERR_GRACE)]
+    lines = [line for line in lines if line.strip()]
+    if not lines:
+        return ""
+    text = "\n".join("  " + line for line in lines[-STDERR_TAIL_LINES:])
+    if len(text) > STDERR_TAIL_CHARS:
+        text = "  ...\n" + text[-STDERR_TAIL_CHARS:]
+    return text
+
+
+def _with_server_output(message: str, reader: _LineReader,
+                        proc: "subprocess.Popen") -> str:
+    """Attach whatever the server said on its way down.
+
+    Without this, a server that fails to start produces one line -- 'server
+    closed its output before responding' -- and the ModuleNotFoundError or
+    missing env var that actually caused it goes in the bin. Startup failure
+    is the most common --stdio outcome for a new user, so it is the one that
+    most needs the real message.
+    """
+    parts = [message]
+    status = proc.poll()
+    if status is not None and status != 0:
+        parts.append(f"the server exited with status {status}")
+    tail = _stderr_tail(reader)
+    if tail:
+        parts.append("server stderr:\n" + tail)
+    return "\n".join(parts)
 
 
 def _split_command(command: str) -> list:
@@ -193,12 +272,14 @@ def fetch_tools_via_stdio(command: str) -> dict:
     try:
         proc = subprocess.Popen(
             argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL)
+            stderr=subprocess.PIPE)
     except OSError as e:
         raise StdioError(f"cannot run {argv[0]!r}: {e}")
 
     deadline = time.monotonic() + PROCESS_TIMEOUT
     reader = _LineReader(proc.stdout)
+    err_reader = _LineReader(proc.stderr, limit=MAX_STDERR_BYTES,
+                             flush_partial=True)
     try:
         _send(proc, {
             "jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -243,6 +324,8 @@ def fetch_tools_via_stdio(command: str) -> dict:
         else:
             raise StdioError(
                 f"server paginated tools/list past {MAX_LIST_PAGES} pages")
+    except StdioError as e:
+        raise StdioError(_with_server_output(str(e), err_reader, proc)) from None
     finally:
         _kill(proc)
 
