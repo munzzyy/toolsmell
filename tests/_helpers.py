@@ -20,10 +20,12 @@ def mk_tool(name: str, description: str = "", schema=None, index: int = 0):
     return dataclasses.replace(tools[0], index=index)
 
 
-def lint(*tool_dicts):
-    """Parse and lint one or more raw tool dicts as if they were one manifest."""
+def lint(*tool_dicts, enabled=None):
+    """Parse and lint one or more raw tool dicts as if they were one manifest.
+    `enabled` restricts which rule ids may report, the same way --ignore and
+    --select do."""
     tools = parse_tools({"tools": list(tool_dicts)})
-    return lint_tools(tools, source="<test>")
+    return lint_tools(tools, source="<test>", enabled=enabled)
 
 
 def by_rule(result, rule_id: str):

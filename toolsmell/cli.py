@@ -6,7 +6,7 @@ import argparse
 import os
 import sys
 
-from . import __version__
+from . import __version__, config
 from .catalog import all_rules
 from .lint import lint_data, lint_path
 from .manifest import ManifestError
@@ -37,6 +37,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="also exit non-zero if any single tool scores at or above N. The "
              "overall score is a mean, so one bad tool among many clean ones "
              "can pass --max-score; this gate catches it (default: off)")
+    selection = p.add_mutually_exclusive_group()
+    selection.add_argument(
+        "--ignore", metavar="IDS",
+        help="comma-separated rule ids to switch off, e.g. TS-003,TS-008. "
+             "An ignored rule stops reporting and stops counting toward the "
+             "smell score")
+    selection.add_argument(
+        "--select", metavar="IDS",
+        help="comma-separated rule ids to run, switching every other rule off. "
+             "Mutually exclusive with --ignore")
     p.add_argument("--no-color", action="store_true", help="disable ANSI color")
     p.add_argument("--list-rules", action="store_true", help="print every rule id and exit")
     p.add_argument("--version", action="version", version=f"toolsmell {__version__}")
@@ -129,10 +139,21 @@ def main(argv=None) -> int:
 
     color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
+    # Rule selection is resolved once, up front: a bad rule id should fail
+    # before any file is read, not halfway through a multi-file run. The
+    # pyproject.toml search starts next to the first manifest, or in the
+    # working directory for --stdio.
+    config_start = args.target[0] if args.target else os.getcwd()
+    try:
+        enabled = config.resolve(args.ignore, args.select, config_start=config_start)
+    except config.ConfigError as e:
+        print(f"toolsmell: {e}", file=sys.stderr)
+        return 2
+
     if args.stdio:
         try:
             data = fetch_tools_via_stdio(args.stdio)
-            result = lint_data(data, source=f"stdio:{args.stdio}")
+            result = lint_data(data, source=f"stdio:{args.stdio}", enabled=enabled)
         except (StdioError, ManifestError) as e:
             print(f"toolsmell: {e}", file=sys.stderr)
             return 2
@@ -146,7 +167,7 @@ def main(argv=None) -> int:
             return 2
 
         try:
-            result = lint_path(target_path)
+            result = lint_path(target_path, enabled=enabled)
         except ManifestError as e:
             print(f"toolsmell: {e}", file=sys.stderr)
             return 2

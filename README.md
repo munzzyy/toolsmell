@@ -120,6 +120,35 @@ under a passing `--max-score`. `--max-tool-score N` closes that gap: it fails
 the run if any single tool scores at or above `N`, and prints which tool(s)
 tripped it (on stderr) so a red CI run points straight at what to fix.
 
+## Selecting rules
+
+Not every rule suits every server. `--ignore` switches rules off, `--select`
+switches everything else off, and the two can't be combined:
+
+```bash
+toolsmell ./tools.json --ignore TS-003,TS-008   # skip the return-words and error-words checks
+toolsmell ./tools.json --select TS-001,TS-005   # run only these two
+```
+
+A switched-off rule stops reporting **and stops counting toward the smell
+score**, so ignoring a rule you disagree with also takes its weight out of
+whatever `--max-score` is gating on. An unknown rule id exits 2 and names
+it rather than being quietly skipped.
+
+To make it stick, put the list in your `pyproject.toml`:
+
+```toml
+[tool.toolsmell]
+ignore = ["TS-003", "TS-008"]
+```
+
+toolsmell looks for the nearest `pyproject.toml` at or above the manifest
+it's linting (the working directory for `--stdio`). `--ignore` and
+`--select` on the command line override the file. Reading the table needs
+Python 3.11+ for `tomllib`, and toolsmell has no runtime dependencies, so
+on 3.9 and 3.10 it prints a warning to stderr and runs every rule instead
+of pretending the file was empty.
+
 ## Getting the manifest
 
 Most MCP servers define their tools in code, not as a file sitting on

@@ -37,10 +37,12 @@ class LintResult:
         return out
 
 
-def lint_tools(tools, source: str = "<data>") -> LintResult:
+def lint_tools(tools, source: str = "<data>", enabled=None) -> LintResult:
+    """Lint a parsed tool list. `enabled` is the set of rule ids allowed to
+    report (see toolsmell.config), or None to run every rule."""
     result = LintResult(source=source)
     for tool in tools:
-        findings = run_all(tool, tools)
+        findings = run_all(tool, tools, enabled=enabled)
         findings.sort(key=lambda f: f.sort_key())
         result.tools.append(ToolReport(name=tool.name, findings=findings,
                                         score=tool_score(findings)))
@@ -48,10 +50,11 @@ def lint_tools(tools, source: str = "<data>") -> LintResult:
     return result
 
 
-def lint_data(data, source: str = "<data>") -> LintResult:
-    return lint_tools(parse_tools(data, source=source), source=source)
+def lint_data(data, source: str = "<data>", enabled=None) -> LintResult:
+    return lint_tools(parse_tools(data, source=source), source=source,
+                      enabled=enabled)
 
 
-def lint_path(path) -> LintResult:
+def lint_path(path, enabled=None) -> LintResult:
     tools = load_manifest(path)
-    return lint_tools(tools, source=str(path))
+    return lint_tools(tools, source=str(path), enabled=enabled)

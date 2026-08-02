@@ -13,8 +13,13 @@ ALL_RULES = [
 ]
 
 
-def run_all(tool, all_tools) -> list:
+def run_all(tool, all_tools, enabled=None) -> list:
+    """Every finding for one tool. `enabled` is a set of rule ids to keep, or
+    None for all of them. Filtering happens here rather than at report time
+    so a suppressed rule drops out of the smell score too."""
     findings = []
     for rule in ALL_RULES:
         findings.extend(rule(tool, all_tools))
-    return findings
+    if enabled is None:
+        return findings
+    return [f for f in findings if f.rule_id in enabled]
