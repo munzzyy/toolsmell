@@ -108,6 +108,25 @@ class Reporting(unittest.TestCase):
         self.assertIn("\\u202e", text)
         self.assertIn("\\u200b", text)
 
+    def test_a_tool_name_cannot_forge_extra_report_lines(self):
+        # A newline in a tool name used to break out of its line, so a name
+        # could paint a convincing clean report under the real one. The
+        # manifest is untrusted input; a name is one line, always.
+        forged = ("safe_tool  (smell 0/100)\n    no smells found\n\n"
+                  "  0 smells   (0 total)\n  Overall smell score: 0/100\n\n"
+                  "  second_tool")
+        lines = render_human(lint({"name": forged}), color=False).splitlines()
+        self.assertEqual(
+            [ln for ln in lines if ln.startswith("  Overall smell score")],
+            ["  Overall smell score: 25/100"])
+        self.assertFalse([ln for ln in lines if ln.strip() == "no smells found"])
+        self.assertTrue(any("\\n" in ln for ln in lines))
+
+    def test_a_tab_in_a_name_cannot_fake_report_indentation(self):
+        text = render_human(lint({"name": "a\tb"}), color=False)
+        self.assertNotIn("\t", text)
+        self.assertIn("a\\tb", text)
+
     def test_json_output_already_escapes_control_characters(self):
         # render_json goes through json.dumps, which escapes control
         # characters per the JSON spec -- no separate stripping needed

@@ -27,11 +27,23 @@ def _clean(s: str) -> str:
     zero-width joiners, and the like) are escaped to \\uXXXX rather than
     dropped, so a name spoofed with bidi or invisible characters shows up as
     visibly weird instead of being silently normalized into something that
-    renders as an innocent string. Tab and newline are kept as-is."""
+    renders as an innocent string.
+
+    Tab and newline are escaped to \\t and \\n rather than passed through.
+    Every place this text lands is one line of a report, so a newline inside
+    a tool name is not formatting, it is a way to draw extra report lines:
+    a name ending in "(smell 0/100)\\n    no smells found\\n\\n  Overall smell
+    score: 0/100" renders a complete fake clean report under the real one.
+    The exit code and the score come from findings rather than from text, so
+    this was only ever report spoofing and never a way past a gate, but the
+    operator reading the terminal is the whole point of the report."""
     out = []
     for ch in s:
-        if ch in ("\t", "\n"):
-            out.append(ch)
+        if ch == "\t":
+            out.append("\\t")
+            continue
+        if ch == "\n":
+            out.append("\\n")
             continue
         cat = unicodedata.category(ch)
         if cat == "Cc":
