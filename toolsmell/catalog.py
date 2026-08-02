@@ -120,6 +120,50 @@ _RULES = [
         "Add an 'enum' listing the allowed values to the parameter's "
         "schema instead of describing them in prose.",
     ),
+    Rule(
+        "TS-013", Severity.MEDIUM,
+        "Tool name breaks the MCP name rules",
+        "The name is longer than 128 characters or uses characters outside "
+        "A-Z a-z 0-9 _ . - , which the spec does not allow. A client that "
+        "enforces the rule drops the tool, so it never reaches the agent.",
+        "Rename the tool to at most 128 characters of letters, digits, "
+        "underscore, dot, or hyphen.",
+    ),
+    Rule(
+        "TS-014", Severity.MEDIUM,
+        "x-mcp-header is not a usable header name",
+        "A parameter's 'x-mcp-header' is empty, is not a string, or contains "
+        "characters an HTTP field name cannot hold. A line break is the "
+        "worst case: it splits the request headers instead of naming one.",
+        "Set 'x-mcp-header' to a single HTTP token: letters, digits, and "
+        "!#$%&'*+-.^_`|~ with no spaces or line breaks.",
+    ),
+    Rule(
+        "TS-015", Severity.MEDIUM,
+        "Two parameters claim the same header",
+        "Two parameters in the same inputSchema map to header names that "
+        "differ only in case. HTTP field names are case-insensitive, so "
+        "they are one header and one of the values is lost.",
+        "Give each parameter its own header name, compared without regard "
+        "to case.",
+    ),
+    Rule(
+        "TS-016", Severity.MEDIUM,
+        "x-mcp-header on a type that cannot be sent as one",
+        "A parameter carrying 'x-mcp-header' is typed object, array, or "
+        "number. Only string, integer and boolean have an agreed spelling "
+        "in a header value.",
+        "Send the parameter in the request body instead, or narrow it to a "
+        "string, integer, or boolean.",
+    ),
+    Rule(
+        "TS-017", Severity.MEDIUM,
+        "Icon src uses a scheme consumers reject",
+        "A tool icon's 'src' is not an https: or data: URI. Every other "
+        "scheme, javascript: and file: included, is one a consumer is "
+        "required to refuse, so the icon simply never loads.",
+        "Serve the icon over https:, or inline it as a data: URI.",
+    ),
 ]
 
 BY_ID = {r.id: r for r in _RULES}

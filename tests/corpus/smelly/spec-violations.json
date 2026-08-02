@@ -1,0 +1,62 @@
+{
+  "tools": [
+    {
+      "name": "sync orders (v2)",
+      "description": "Synchronizes the order list for a store with the upstream warehouse feed and returns the number of orders created, updated, and left alone. Pass the store id to pick which store to sync. Raises an error if the store id is unknown or the warehouse feed is unreachable.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "description": "Identifier of the store whose orders should be synchronized.",
+            "x-mcp-header": "X-Store Id"
+          }
+        },
+        "required": ["store_id"]
+      }
+    },
+    {
+      "name": "fetch_report",
+      "description": "Fetches a rendered sales report for a date range and returns it as a PDF along with the row count. Pass the trace value to correlate the call with your own logs, and the filters object to narrow the rows. Raises an error if the date range is invalid.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "trace": {
+            "type": "string",
+            "description": "Correlation id echoed back on the response.",
+            "x-mcp-header": "X-Trace"
+          },
+          "trace_alt": {
+            "type": "string",
+            "description": "Secondary correlation id, kept for older clients.",
+            "x-mcp-header": "x-trace"
+          },
+          "filters": {
+            "type": "object",
+            "description": "Row filters to apply before rendering the report.",
+            "x-mcp-header": "X-Filters"
+          }
+        },
+        "required": ["trace"]
+      }
+    },
+    {
+      "name": "open_dashboard",
+      "description": "Opens the account dashboard for the given customer and returns the resolved dashboard url and the customer display name. Raises an error if the customer id does not exist.",
+      "icons": [
+        {"src": "javascript:alert(document.cookie)", "mimeType": "image/svg+xml"},
+        {"src": "/static/dashboard.png"}
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "description": "Identifier of the customer whose dashboard to open."
+          }
+        },
+        "required": ["customer_id"]
+      }
+    }
+  ]
+}

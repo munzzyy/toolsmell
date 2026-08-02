@@ -143,6 +143,10 @@ class Tool:
     description: str
     input_schema: dict
     index: int  # position in the tools array; used for stable identity
+    # MCP 2026-07-28 lets a tool ship display icons. Kept as a tuple so a
+    # frozen Tool stays frozen; entries are whatever the manifest had, and
+    # the rules treat them as untrusted like everything else here.
+    icons: tuple = ()
 
     @property
     def params(self) -> list:
@@ -243,5 +247,8 @@ def parse_tools(data, source: str = "<data>") -> list:
         description = description if isinstance(description, str) else ""
         schema = entry.get("inputSchema")
         schema = schema if isinstance(schema, dict) else {}
-        out.append(Tool(name=name, description=description, input_schema=schema, index=i))
+        icons = entry.get("icons")
+        icons = tuple(icons) if isinstance(icons, list) else ()
+        out.append(Tool(name=name, description=description, input_schema=schema,
+                        index=i, icons=icons))
     return out

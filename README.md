@@ -231,10 +231,25 @@ its severity, and how to fix it.
 - String parameters whose description spells out allowed values in prose
   instead of a schema `enum`.
 
+Plus a handful of checks against MCP 2026-07-28 itself, where the spec says
+MUST and a conforming client drops the tool rather than warning about it:
+
+- Tool names outside the 1 to 128 characters of `A-Za-z0-9_.-` the spec
+  allows.
+- `x-mcp-header` values that aren't usable HTTP field names, including ones
+  carrying a line break.
+- Two parameters mapped to header names that differ only in case.
+- `x-mcp-header` on an object, array, or `number` parameter.
+- Tool icons whose `src` is not an `https:` or `data:` URI.
+
 ## What it does not do
 
 - It's a static linter, not a security scanner. It never looks for prompt
   injection, dangerous commands, or secrets -- that's a different tool's job.
+  A couple of the conformance rules do catch shapes that are also injection
+  vectors (a CRLF in an `x-mcp-header`, a `javascript:` icon), but they're
+  there because the spec forbids them, and toolsmell stops at what the spec
+  forbids.
 - It's not a runtime tester. Even with `--stdio` running the server for
   real, toolsmell only ever calls `tools/list` -- it never calls an actual
   tool, and it never touches the network (stdio is a local pipe, not a

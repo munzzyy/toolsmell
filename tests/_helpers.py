@@ -8,15 +8,19 @@ from toolsmell.lint import lint_tools
 from toolsmell.manifest import parse_tools
 
 
-def mk_tool(name: str, description: str = "", schema=None, index: int = 0):
+def mk_tool(name: str, description: str = "", schema=None, index: int = 0,
+            icons=None):
     """Build a single Tool without going through JSON, for rule unit tests.
     `index` is overridden after parsing so callers can build two distinct
     tools (e.g. for the name-collision rule) with different identities."""
-    tools = parse_tools({"tools": [{
+    entry = {
         "name": name,
         "description": description,
         "inputSchema": schema or {},
-    }]})
+    }
+    if icons is not None:
+        entry["icons"] = icons
+    tools = parse_tools({"tools": [entry]})
     return dataclasses.replace(tools[0], index=index)
 
 

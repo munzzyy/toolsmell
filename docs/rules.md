@@ -1,10 +1,15 @@
 # Rules reference
 
 Every smell toolsmell checks for, what it looks for, and what to do about a
-hit. Severities are info, low, or medium -- these are hygiene smells, not
-security bugs, so there is no high/critical tier. A test keeps this file in
-sync with `toolsmell/catalog.py`, so a rule cannot exist without being
-documented here.
+hit. Severities are info, low, or medium -- these are hygiene and
+conformance smells, not security bugs, so there is no high/critical tier. A
+test keeps this file in sync with `toolsmell/catalog.py`, so a rule cannot
+exist without being documented here.
+
+TS-001 through TS-012 are judgment calls about whether a description and
+schema read well. TS-013 through TS-017 are not: each one is a MUST in MCP
+2026-07-28, and a conforming client drops a tool that breaks one instead of
+warning about it.
 
 ## TS-001
 
@@ -197,3 +202,87 @@ values") next to at least one quoted token.
 
 Fix: add an `enum` listing the allowed values to the parameter's schema
 instead of describing them in prose.
+
+## TS-013
+
+Tool name breaks the MCP name rules. Severity medium.
+
+MCP 2026-07-28 fixed the shape of a tool name: 1 to 128 characters, drawn
+from `A-Z a-z 0-9 _ . -` and nothing else. A client that enforces the rule
+drops a tool that breaks it, so the tool never reaches the agent and the
+server has no way to tell.
+
+```json
+{"name": "search orders (v2)"}
+```
+
+Fix: rename the tool to at most 128 characters of letters, digits,
+underscore, dot, or hyphen.
+
+## TS-014
+
+`x-mcp-header` is not a usable header name. Severity medium.
+
+`x-mcp-header` mirrors a parameter into an HTTP request header, so its
+value has to be something a header name can be: a non-empty RFC 9110 token
+of letters, digits and ``!#$%&'*+-.^_`|~``. This rule fires on an empty
+value, a non-string value, characters outside that set, and on a carriage
+return or newline, which splits the request headers rather than naming one.
+
+```json
+{"properties": {"trace": {"type": "string", "x-mcp-header": "X-Trace\r\nX-Admin: 1"}}}
+```
+
+Fix: use a single token with no spaces or line breaks.
+
+## TS-015
+
+Two parameters claim the same header. Severity medium.
+
+Two parameters in one `inputSchema` set `x-mcp-header` to names that differ
+only in case. HTTP field names are compared case-insensitively, so these are
+one header with two claimants and one of the two values is dropped on the
+way out.
+
+```json
+{
+  "properties": {
+    "trace": {"type": "string", "x-mcp-header": "X-Trace"},
+    "trace_id": {"type": "string", "x-mcp-header": "x-trace"}
+  }
+}
+```
+
+Fix: give each parameter its own header name, compared without regard to
+case.
+
+## TS-016
+
+`x-mcp-header` on a type that cannot be sent as one. Severity medium.
+
+Only `string`, `integer` and `boolean` may carry `x-mcp-header`. An object
+or array has no agreed header spelling, and `number` is excluded outright
+because a float does not have one either. A nullable parameter is judged on
+its real type, so `["string", "null"]` is fine.
+
+```json
+{"properties": {"filters": {"type": "object", "x-mcp-header": "X-Filters"}}}
+```
+
+Fix: send the parameter in the request body, or narrow it to a string,
+integer, or boolean.
+
+## TS-017
+
+Icon src uses a scheme consumers reject. Severity medium.
+
+A tool's `icons[].src` has to be an `https:` or `data:` URI. Consumers are
+required to refuse every other scheme, `javascript:` and `file:` included,
+along with a src that carries no scheme at all. An icon that breaks the rule
+does not render.
+
+```json
+{"icons": [{"src": "javascript:alert(1)"}]}
+```
+
+Fix: serve the icon over https:, or inline it as a data: URI.

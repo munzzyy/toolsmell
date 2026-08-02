@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from toolsmell import cli
+from toolsmell.catalog import all_rules
 from toolsmell.lint import lint_data
 from toolsmell.report import render_human, render_json
 from tests._helpers import lint
@@ -118,7 +119,10 @@ class Reporting(unittest.TestCase):
         lines = render_human(lint({"name": forged}), color=False).splitlines()
         self.assertEqual(
             [ln for ln in lines if ln.startswith("  Overall smell score")],
-            ["  Overall smell score: 25/100"])
+            # 50, not 25: TS-001 for the missing description plus TS-013,
+            # since a name built to forge report lines is also not a legal
+            # MCP tool name.
+            ["  Overall smell score: 50/100"])
         self.assertFalse([ln for ln in lines if ln.strip() == "no smells found"])
         self.assertTrue(any("\\n" in ln for ln in lines))
 
@@ -244,10 +248,12 @@ class CLI(unittest.TestCase):
         self.assertEqual(code, 2)
 
     def test_list_rules_exits_zero_and_prints_every_id(self):
+        # Driven off the catalog rather than a hardcoded range, so adding a
+        # rule cannot leave this passing while --list-rules omits it.
         code, out = self._run(["--list-rules"])
         self.assertEqual(code, 0)
-        for i in range(1, 13):
-            self.assertIn(f"TS-{i:03d}", out)
+        for rule in all_rules():
+            self.assertIn(rule.id, out)
 
     def test_version_flag(self):
         with self.assertRaises(SystemExit) as cm:

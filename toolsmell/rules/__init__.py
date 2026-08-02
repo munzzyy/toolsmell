@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import description, examples, naming, schema
+from . import conformance, description, examples, naming, schema
 
 # Order is cosmetic; findings are sorted by severity at report time.
 ALL_RULES = [
@@ -10,6 +10,7 @@ ALL_RULES = [
     schema.check,
     naming.check,
     examples.check,
+    conformance.check,
 ]
 
 
