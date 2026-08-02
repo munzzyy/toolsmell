@@ -70,9 +70,16 @@ output it acts on.
 Parameter undocumented in the description. Severity medium.
 
 `inputSchema.properties` defines a parameter that the description never
-mentions -- not by its literal name, and not by its words split out of
-snake_case or camelCase. An agent has to guess its purpose from the name
-alone.
+mentions -- not by its literal name, not by its words split out of
+snake_case or camelCase, and not by a longer word starting with the name.
+An agent has to guess its purpose from the name alone.
+
+That last allowance is what lets "in a GitHub repository" document a `repo`
+parameter, and "an authentication token" document `auth_token`. It applies
+only to names of at least four characters: under that, a shared prefix
+carries no information (`idle` would document `id`), so short names keep the
+strict whole-word rule. It is a prefix test rather than a stemmer, so
+`currencies` does not document `currency`.
 
 ```json
 {

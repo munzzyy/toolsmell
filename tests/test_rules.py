@@ -121,6 +121,60 @@ class UndocumentedParam(unittest.TestCase):
             schema={"type": "object", "properties": {"id": {"type": "string"}}})
         self.assertNotIn("TS-005", _ids(schema.check(t, [t])))
 
+    def test_a_longer_word_starting_with_the_param_counts_as_mentioned(self):
+        # The exact false positive that cost a well-documented tool 25
+        # points: 'repo' called undocumented by a description that says
+        # "in a GitHub repository".
+        t = mk_tool(
+            "create_issue",
+            description="Create a new issue in a GitHub repository with the "
+                        "given title and body. Returns the issue number, or "
+                        "an error if the repository does not exist.",
+            schema={"type": "object", "properties": {"repo": {"type": "string"}}})
+        self.assertNotIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_the_same_allowance_covers_split_name_words(self):
+        # 'auth_token' splits to auth/token, and 'authentication' documents
+        # 'auth' the same way 'repository' documents 'repo'.
+        t = mk_tool(
+            "sign_in",
+            description="Exchanges an authentication token for a session and "
+                        "returns the session id, or an error if it is expired.",
+            schema={"type": "object",
+                    "properties": {"auth_token": {"type": "string"}}})
+        self.assertNotIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_the_allowance_does_not_pretend_to_be_a_stemmer(self):
+        # It matches a token that STARTS WITH the param name, nothing more.
+        # 'currencies' does not start with 'currency', so this still fires,
+        # and the rule stays something a user can predict by reading it.
+        t = mk_tool(
+            "convert",
+            description="Converts an amount between the supported currencies "
+                        "and returns the converted value, error if unknown.",
+            schema={"type": "object", "properties": {"currency": {"type": "string"}}})
+        self.assertIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_short_names_keep_the_strict_whole_token_rule(self):
+        # Under four characters a shared prefix means nothing: 'idle' must
+        # not document 'id'. This is what the length floor protects.
+        t = mk_tool(
+            "get_user",
+            description="Returns the idle users on the account, with an error "
+                        "if the account is unknown.",
+            schema={"type": "object", "properties": {"id": {"type": "string"}}})
+        self.assertIn("TS-005", _ids(schema.check(t, [t])))
+
+    def test_a_prefix_match_still_needs_a_word_boundary(self):
+        # 'user' must not be documented by 'superuser' -- the allowance
+        # extends a token to the right, never to the left.
+        t = mk_tool(
+            "grant",
+            description="Grants superuser rights on the account and returns "
+                        "the result, or an error if it fails.",
+            schema={"type": "object", "properties": {"user": {"type": "string"}}})
+        self.assertIn("TS-005", _ids(schema.check(t, [t])))
+
     def test_param_in_a_composed_subschema_is_still_checked(self):
         # Params tucked under allOf must be linted like top-level ones, or
         # the rules fail open on the composed shape.
