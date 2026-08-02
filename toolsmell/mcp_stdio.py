@@ -272,7 +272,14 @@ def _with_server_output(message: str, reader: _LineReader,
     most needs the real message.
     """
     parts = [message]
-    status = proc.poll()
+    # Wait rather than poll. A server that dies on startup usually loses the
+    # race with the client noticing, and poll() on a process that is dead but
+    # not yet reaped returns None, which would drop the exit status from the
+    # error at exactly the moment it is worth the most.
+    try:
+        status = proc.wait(timeout=STDERR_GRACE)
+    except subprocess.TimeoutExpired:
+        status = None
     if status is not None and status != 0:
         parts.append(f"the server exited with status {status}")
     tail = _stderr_tail(reader)
