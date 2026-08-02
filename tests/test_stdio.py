@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -78,7 +79,10 @@ class FetchToolsViaStdio(unittest.TestCase):
         original = mcp_stdio.MAX_RESPONSE_BYTES
         mcp_stdio.MAX_RESPONSE_BYTES = 1024
         try:
-            with self.assertRaises(StdioError):
+            # StdioLimitError specifically: the version probe swallows
+            # protocol errors to fall back to the legacy handshake, and it
+            # must never swallow a size cap the same way.
+            with self.assertRaises(mcp_stdio.StdioLimitError):
                 fetch_tools_via_stdio(_cmd("oversized"))
         finally:
             mcp_stdio.MAX_RESPONSE_BYTES = original
@@ -100,6 +104,79 @@ class FetchToolsViaStdio(unittest.TestCase):
             fetch_tools_via_stdio(f"echo hi; touch {shlex.quote(str(marker))}")
         self.assertFalse(marker.exists(),
                           "a shell would have run `touch` here; shlex+argv must not")
+
+
+class _FastDiscover:
+    """Shrink the probe budget so a fixture that deliberately ignores
+    server/discover doesn't cost the suite five seconds."""
+
+    def __init__(self, seconds: float = 0.3):
+        self._seconds = seconds
+
+    def __enter__(self):
+        self._original = mcp_stdio.DISCOVER_TIMEOUT
+        mcp_stdio.DISCOVER_TIMEOUT = self._seconds
+        return self
+
+    def __exit__(self, *exc):
+        mcp_stdio.DISCOVER_TIMEOUT = self._original
+
+
+class ProtocolNegotiation(unittest.TestCase):
+    """MCP 2026-07-28 replaced initialize with a server/discover probe.
+    Servers on both revisions are in the wild, so toolsmell has to reach
+    either one without being told which it is talking to."""
+
+    def test_modern_server_is_reached_through_server_discover(self):
+        # This fixture answers server/discover and nothing else, and it
+        # rejects any request missing the _meta fields the revision made
+        # mandatory -- so getting tools back proves both.
+        result = fetch_tools_via_stdio(_cmd("modern"))
+        self.assertEqual(result["tools"][0]["name"], "modern_weather")
+
+    def test_legacy_server_still_works_through_the_fallback(self):
+        result = fetch_tools_via_stdio(_cmd("ok"))
+        self.assertEqual(result["tools"][0]["name"], "get_weather")
+
+    def test_probe_carries_the_required_meta_fields(self):
+        request = mcp_stdio._request(1, mcp_stdio.DISCOVER_METHOD)
+        meta = request["params"][mcp_stdio.META_KEY]
+        self.assertEqual(meta[mcp_stdio.PROTOCOL_VERSION_META],
+                          mcp_stdio.PROTOCOL_VERSION)
+        self.assertIn(mcp_stdio.CLIENT_CAPABILITIES_META, meta)
+
+    def test_legacy_requests_carry_no_meta(self):
+        # _meta is a 2026-07-28 field. Sending it to a legacy server is not
+        # harmless politeness, it is a request the server never agreed to.
+        request = mcp_stdio._request(3, "tools/list", modern=False)
+        self.assertNotIn(mcp_stdio.META_KEY, request["params"])
+
+    def test_unsupported_version_does_not_fall_back(self):
+        # The fixture answers -32022 and then offers a working legacy
+        # handshake. A client that falls back gets tools; toolsmell must
+        # stop and say the version was rejected.
+        with self.assertRaises(StdioError) as ctx:
+            fetch_tools_via_stdio(_cmd("unsupported-version"))
+        message = str(ctx.exception)
+        self.assertIn("rejected protocol version", message)
+        self.assertIn("2099-01-01", message)
+
+    def test_silent_probe_times_out_into_the_legacy_handshake(self):
+        # A legacy server that ignores unknown methods entirely. The
+        # fallback must be keyed to "no usable answer", not to one error
+        # code, or this server is unreachable.
+        with _FastDiscover():
+            result = fetch_tools_via_stdio(_cmd("discover-silent"))
+        self.assertEqual(result["tools"][0]["name"], "get_weather")
+
+    def test_probe_budget_comes_out_of_the_overall_deadline(self):
+        # A hung server must still die on PROCESS_TIMEOUT, not on
+        # PROCESS_TIMEOUT plus a probe budget bolted on top.
+        with _FastTimeouts(), _FastDiscover(5.0):
+            started = time.monotonic()
+            with self.assertRaises(StdioError):
+                fetch_tools_via_stdio(_cmd("hang"))
+            self.assertLess(time.monotonic() - started, 3.0)
 
 
 class ServerStderr(unittest.TestCase):

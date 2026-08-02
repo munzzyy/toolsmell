@@ -157,13 +157,25 @@ ways to get one:
 
 **`--stdio` (the easy way).** Point toolsmell at the command that starts
 your server and it does the rest -- spawns it, speaks just enough of the
-MCP handshake (`initialize`, then `tools/list`) over its stdin/stdout, and
-lints whatever comes back:
+MCP handshake over its stdin/stdout, and lints whatever comes back:
 
 ```bash
 toolsmell --stdio "python my_server.py"
 toolsmell --stdio "node server.js --port 0"
 ```
+
+Servers on both sides of the MCP 2026-07-28 revision work. toolsmell opens
+with a `server/discover` probe and drops back to the older `initialize` +
+`notifications/initialized` handshake if the server hasn't heard of it, so
+it doesn't need to be told which revision yours speaks. The one case it
+won't retry is a server that answers the probe with
+`UnsupportedProtocolVersionError`: that server does speak the new protocol
+and has turned down toolsmell's version, and the old handshake wouldn't fix
+that.
+
+If the server dies before answering, toolsmell prints its exit status and
+the tail of its stderr, since a missing module or a bad interpreter path is
+the usual reason a first `--stdio` run fails.
 
 This is the one thing in toolsmell that executes a subprocess, so it's
 opt-in and worth being deliberate about: **only point `--stdio` at a server

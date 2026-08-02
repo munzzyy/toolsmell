@@ -7,11 +7,15 @@ hostile peer throughout: the command is split with shlex and exec'd as a
 real argv list (never a shell), every read is bounded in both size and
 time, and the process gets killed on any error, timeout, or exit.
 
-The handshake itself is deliberately small: `initialize`, the
-`notifications/initialized` notice that has to follow it, then
-`tools/list`. That's every call the protocol requires to get a tool
-listing, so there's no reason to depend on a full MCP client library for
-it.
+The handshake is deliberately small, and there are two of them because the
+protocol changed. MCP 2026-07-28 dropped `initialize` in favour of a
+`server/discover` probe and made every request carry its protocol version
+in `_meta`. Servers written against either revision are still out there, so
+toolsmell probes with `server/discover` first and falls back to
+`initialize` + `notifications/initialized` on anything that says the server
+has not heard of it. Either way it ends at `tools/list`, which is the only
+call it actually wants, so there's no reason to depend on a full MCP client
+library for this.
 """
 
 from __future__ import annotations
@@ -44,7 +48,34 @@ PROCESS_TIMEOUT = 20.0
 # stall the whole call past the overall budget.
 READ_TIMEOUT = 10.0
 
-MCP_PROTOCOL_VERSION = "2024-11-05"
+# The revision toolsmell asks for, and the one it drops back to. 2026-07-28
+# replaced the initialize handshake with a server/discover probe; anything
+# older still expects initialize.
+PROTOCOL_VERSION = "2026-07-28"
+LEGACY_PROTOCOL_VERSION = "2024-11-05"
+
+# 2026-07-28 made the protocol stateless: the version and the client's
+# capabilities ride along in _meta on every request rather than being agreed
+# once at startup.
+META_KEY = "_meta"
+PROTOCOL_VERSION_META = "io.modelcontextprotocol/protocolVersion"
+CLIENT_CAPABILITIES_META = "io.modelcontextprotocol/clientCapabilities"
+
+DISCOVER_METHOD = "server/discover"
+
+# UnsupportedProtocolVersionError. This is the one probe outcome that must
+# NOT fall back: it means the server does speak the modern protocol and has
+# rejected our version, so retrying with an older handshake is just noise.
+# Every other error, and a timeout, means "probably a legacy server" -- the
+# fallback is deliberately not keyed to any single other code, because a
+# legacy server can reject an unknown method however it likes.
+UNSUPPORTED_PROTOCOL_VERSION = -32022
+
+# How long to wait for the probe before assuming the server is legacy. A
+# server that answers server/discover at all answers it immediately; this is
+# only the budget for one that ignores unknown methods entirely, and it is
+# carved out of PROCESS_TIMEOUT rather than added to it.
+DISCOVER_TIMEOUT = 5.0
 
 # A real server lists its tools in a handful of pages at most. Cap the
 # follow-the-cursor loop so a hostile server that always returns a fresh
@@ -68,6 +99,16 @@ STDERR_GRACE = 0.5
 class StdioError(Exception):
     """Raised when a --stdio server can't be launched, times out, or sends
     something that isn't a usable JSON-RPC response."""
+
+
+class StdioLimitError(StdioError):
+    """Raised when the server blew past a hard size cap.
+
+    Kept distinct from StdioError so the version probe can treat a protocol
+    error as "probably a legacy server, try the old handshake" without ever
+    treating a size-cap breach the same way. A cap a retry path quietly
+    steps over is not a cap.
+    """
 
 
 class _LineReader:
@@ -146,7 +187,8 @@ class _LineReader:
         except queue.Empty:
             raise StdioError(f"server did not respond within {READ_TIMEOUT:.0f}s")
         if kind == "oversized":
-            raise StdioError(f"server response exceeded {MAX_RESPONSE_BYTES} bytes")
+            raise StdioLimitError(
+                f"server response exceeded {MAX_RESPONSE_BYTES} bytes")
         if kind == "eof":
             raise StdioError("server closed its output before responding")
         return payload
@@ -239,6 +281,101 @@ def _with_server_output(message: str, reader: _LineReader,
     return "\n".join(parts)
 
 
+def _request(request_id: int, method: str, params=None, modern: bool = True) -> dict:
+    """One JSON-RPC request. On the 2026-07-28 path every request carries the
+    protocol version and the client's capabilities in `_meta`; on the legacy
+    path both were settled once by `initialize`, so sending them would be
+    wrong."""
+    body = dict(params or {})
+    if modern:
+        body[META_KEY] = {
+            PROTOCOL_VERSION_META: PROTOCOL_VERSION,
+            # toolsmell reads a tool list and calls nothing, so it claims
+            # nothing. An empty object is the honest answer, not a stub.
+            CLIENT_CAPABILITIES_META: {},
+        }
+    return {"jsonrpc": "2.0", "id": request_id, "method": method, "params": body}
+
+
+def _probe_discover(proc, reader: _LineReader, deadline: float) -> bool:
+    """Ask the server whether it speaks 2026-07-28. True means it does.
+
+    Three outcomes, per the stdio transport spec. A result means modern. An
+    UnsupportedProtocolVersionError means modern but on a version we can't
+    talk, and falling back would only hide that, so it raises. Anything else
+    (any other error code, a timeout, junk on the wire) means the server has
+    never heard of the method, which is what a legacy server looks like.
+    """
+    probe_deadline = min(deadline, time.monotonic() + DISCOVER_TIMEOUT)
+    _send(proc, _request(1, DISCOVER_METHOD))
+    try:
+        response = _recv_response(reader, probe_deadline, 1)
+    except StdioLimitError:
+        raise  # a size cap is never a reason to retry
+    except StdioError:
+        return False
+    error = response.get("error")
+    if error is None:
+        return True
+    code = error.get("code") if isinstance(error, dict) else None
+    if code == UNSUPPORTED_PROTOCOL_VERSION:
+        detail = error.get("message") if isinstance(error, dict) else error
+        raise StdioError(
+            f"the server rejected protocol version {PROTOCOL_VERSION}: {detail}. "
+            "It speaks the modern protocol on a version toolsmell does not, so "
+            "the legacy handshake would not help either.")
+    return False
+
+
+def _legacy_handshake(proc, reader: _LineReader, deadline: float,
+                      request_id: int) -> None:
+    """The pre-2026-07-28 opening: `initialize`, then the
+    `notifications/initialized` notice the spec requires before any other
+    call."""
+    _send(proc, {
+        "jsonrpc": "2.0", "id": request_id, "method": "initialize",
+        "params": {
+            "protocolVersion": LEGACY_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "toolsmell", "version": __version__},
+        },
+    })
+    response = _recv_response(reader, deadline, request_id)
+    _check_error(response, "initialize")
+    _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+
+
+def _list_tools(proc, reader: _LineReader, deadline: float, request_id: int,
+                modern: bool) -> list:
+    """Follow tools/list to the end of its pagination and return every tool."""
+    tools = []
+    cursor = None
+    seen_cursors = set()
+    for _ in range(MAX_LIST_PAGES):
+        params = {} if cursor is None else {"cursor": cursor}
+        _send(proc, _request(request_id, "tools/list", params, modern=modern))
+        response = _recv_response(reader, deadline, request_id)
+        _check_error(response, "tools/list")
+        result = response.get("result")
+        if not isinstance(result, dict):
+            raise StdioError("tools/list response has no 'result' object")
+        page = result.get("tools")
+        if isinstance(page, list):
+            tools.extend(page)
+        # tools/list is paginated: a string nextCursor means fetch the next
+        # page with it. Stop on anything else, and refuse to loop on a
+        # repeated cursor (a server stuck or lying about progress).
+        next_cursor = result.get("nextCursor")
+        if not isinstance(next_cursor, str) or not next_cursor:
+            return tools
+        if next_cursor in seen_cursors:
+            raise StdioError("server repeated a tools/list cursor")
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+        request_id += 1
+    raise StdioError(f"server paginated tools/list past {MAX_LIST_PAGES} pages")
+
+
 def _split_command(command: str) -> list:
     """Split a --stdio command string into an argv list. Split posix
     everywhere except Windows, where posix mode eats the backslashes in a
@@ -281,51 +418,14 @@ def fetch_tools_via_stdio(command: str) -> dict:
     err_reader = _LineReader(proc.stderr, limit=MAX_STDERR_BYTES,
                              flush_partial=True)
     try:
-        _send(proc, {
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": MCP_PROTOCOL_VERSION,
-                "capabilities": {},
-                "clientInfo": {"name": "toolsmell", "version": __version__},
-            },
-        })
-        init_response = _recv_response(reader, deadline, 1)
-        _check_error(init_response, "initialize")
-
-        _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
-
-        tools = []
-        cursor = None
-        request_id = 2
-        seen_cursors = set()
-        for _ in range(MAX_LIST_PAGES):
-            params = {} if cursor is None else {"cursor": cursor}
-            _send(proc, {"jsonrpc": "2.0", "id": request_id, "method": "tools/list",
-                         "params": params})
-            list_response = _recv_response(reader, deadline, request_id)
-            _check_error(list_response, "tools/list")
-            result = list_response.get("result")
-            if not isinstance(result, dict):
-                raise StdioError("tools/list response has no 'result' object")
-            page = result.get("tools")
-            if isinstance(page, list):
-                tools.extend(page)
-            # tools/list is paginated: a string nextCursor means fetch the
-            # next page with it. Stop on anything else, and refuse to loop
-            # on a repeated cursor (a server stuck or lying about progress).
-            next_cursor = result.get("nextCursor")
-            if not isinstance(next_cursor, str) or not next_cursor:
-                break
-            if next_cursor in seen_cursors:
-                raise StdioError("server repeated a tools/list cursor")
-            seen_cursors.add(next_cursor)
-            cursor = next_cursor
-            request_id += 1
-        else:
-            raise StdioError(
-                f"server paginated tools/list past {MAX_LIST_PAGES} pages")
+        modern = _probe_discover(proc, reader, deadline)
+        if not modern:
+            _legacy_handshake(proc, reader, deadline, request_id=2)
+        tools = _list_tools(proc, reader, deadline, request_id=3, modern=modern)
     except StdioError as e:
-        raise StdioError(_with_server_output(str(e), err_reader, proc)) from None
+        # Re-raise as the same class: StdioLimitError has to stay a limit
+        # error after the stderr tail is bolted on.
+        raise type(e)(_with_server_output(str(e), err_reader, proc)) from None
     finally:
         _kill(proc)
 

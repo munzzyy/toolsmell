@@ -23,25 +23,112 @@ def _read_request() -> dict:
     return json.loads(sys.stdin.readline())
 
 
-TOOLS_RESULT = {
-    "tools": [{
-        "name": "get_weather",
+DISCOVER_METHOD = "server/discover"
+METHOD_NOT_FOUND = -32601
+UNSUPPORTED_PROTOCOL_VERSION = -32022
+MODERN_VERSION = "2026-07-28"
+LEGACY_VERSION = "2024-11-05"
+PROTOCOL_VERSION_META = "io.modelcontextprotocol/protocolVersion"
+CLIENT_CAPABILITIES_META = "io.modelcontextprotocol/clientCapabilities"
+
+
+def _tool(name: str) -> dict:
+    return {
+        "name": name,
         "description": "Handles requests.",
         "inputSchema": {
             "type": "object",
             "properties": {"location": {"type": "string"}},
         },
-    }],
-}
+    }
 
 
-def run_ok() -> None:
-    init = _read_request()
-    _write({"jsonrpc": "2.0", "id": init["id"], "result": {
-        "protocolVersion": "2024-11-05", "capabilities": {},
+TOOLS_RESULT = {"tools": [_tool("get_weather")]}
+MODERN_TOOLS_RESULT = {"tools": [_tool("modern_weather")]}
+
+
+def _error(request_id, code: int, message: str) -> None:
+    _write({"jsonrpc": "2.0", "id": request_id,
+            "error": {"code": code, "message": message}})
+
+
+def _has_required_meta(request: dict) -> bool:
+    """Whether a request carries the _meta fields 2026-07-28 makes mandatory.
+    A modern server rejects one that doesn't, which is how the tests prove
+    toolsmell actually sends them."""
+    meta = (request.get("params") or {}).get("_meta") or {}
+    return (meta.get(PROTOCOL_VERSION_META) == MODERN_VERSION
+            and CLIENT_CAPABILITIES_META in meta)
+
+
+def _legacy_open() -> None:
+    """Open the way a pre-2026-07-28 server does. It has never heard of
+    server/discover, so it answers that with method-not-found and waits for
+    initialize, exactly as a real legacy server would."""
+    request = _read_request()
+    if request.get("method") == DISCOVER_METHOD:
+        _error(request["id"], METHOD_NOT_FOUND, "Method not found")
+        request = _read_request()
+    _write({"jsonrpc": "2.0", "id": request["id"], "result": {
+        "protocolVersion": LEGACY_VERSION, "capabilities": {},
         "serverInfo": {"name": "fake-mcp-server", "version": "0"},
     }})
     sys.stdin.readline()  # notifications/initialized -- no response expected
+
+
+def run_ok() -> None:
+    _legacy_open()
+    list_request = _read_request()
+    _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
+
+
+def run_modern() -> None:
+    """A 2026-07-28 server: server/discover is the entry point and there is
+    no initialize at all."""
+    request = _read_request()
+    if request.get("method") != DISCOVER_METHOD:
+        _error(request.get("id"), METHOD_NOT_FOUND,
+               f"this server only speaks {MODERN_VERSION}")
+        return
+    if not _has_required_meta(request):
+        _error(request["id"], -32602, "request _meta is missing required fields")
+        return
+    _write({"jsonrpc": "2.0", "id": request["id"], "result": {
+        "protocolVersion": MODERN_VERSION,
+        "capabilities": {"tools": {}},
+        "serverInfo": {"name": "fake-mcp-server", "version": "0"},
+    }})
+    list_request = _read_request()
+    if not _has_required_meta(list_request):
+        _error(list_request["id"], -32602,
+               "tools/list _meta is missing required fields")
+        return
+    _write({"jsonrpc": "2.0", "id": list_request["id"],
+            "result": MODERN_TOOLS_RESULT})
+
+
+def run_unsupported_version() -> None:
+    """A modern server on a version we can't talk. The client must stop here
+    -- so this fixture goes on to offer a perfectly good legacy handshake,
+    and a client that wrongly falls back gets tools it should never see."""
+    request = _read_request()
+    _error(request["id"], UNSUPPORTED_PROTOCOL_VERSION,
+           "unsupported protocol version; this server requires 2099-01-01")
+    _legacy_open()
+    list_request = _read_request()
+    _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
+
+
+def run_discover_silent() -> None:
+    """A legacy server that neither answers nor rejects an unknown method.
+    The probe has to time out and fall back rather than hang or give up."""
+    _read_request()  # server/discover, deliberately left unanswered
+    init = _read_request()
+    _write({"jsonrpc": "2.0", "id": init["id"], "result": {
+        "protocolVersion": LEGACY_VERSION, "capabilities": {},
+        "serverInfo": {"name": "fake-mcp-server", "version": "0"},
+    }})
+    sys.stdin.readline()  # notifications/initialized
     list_request = _read_request()
     _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
 
@@ -61,12 +148,7 @@ _PAGES = {
 
 
 def run_paging() -> None:
-    init = _read_request()
-    _write({"jsonrpc": "2.0", "id": init["id"], "result": {
-        "protocolVersion": "2024-11-05", "capabilities": {},
-        "serverInfo": {"name": "fake-mcp-server", "version": "0"},
-    }})
-    sys.stdin.readline()  # notifications/initialized -- no response expected
+    _legacy_open()
     while True:
         line = sys.stdin.readline()
         if not line:
@@ -90,7 +172,12 @@ def run_exit() -> None:
 
 
 def run_malformed() -> None:
-    _read_request()
+    # Rejects the probe properly, then answers initialize with garbage, so
+    # this exercises JSON handling on the legacy path rather than the probe.
+    request = _read_request()
+    if request.get("method") == DISCOVER_METHOD:
+        _error(request["id"], METHOD_NOT_FOUND, "Method not found")
+        _read_request()
     sys.stdout.write("this is not json\n")
     sys.stdout.flush()
 
@@ -127,6 +214,9 @@ def run_stderr_flood() -> None:
 
 _MODES = {
     "ok": run_ok,
+    "modern": run_modern,
+    "unsupported-version": run_unsupported_version,
+    "discover-silent": run_discover_silent,
     "startup-failure": run_startup_failure,
     "stderr-flood": run_stderr_flood,
     "paging": run_paging,
