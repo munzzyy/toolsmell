@@ -82,7 +82,13 @@ $ toolsmell examples/weather-tool-clean.json --no-color
 
 ## Install
 
-Pure standard library, Python 3.9+, no runtime dependencies. Clone it and it runs:
+Pure standard library, Python 3.9+, no runtime dependencies.
+
+```bash
+pipx install git+https://github.com/munzzyy/toolsmell
+```
+
+Or clone it and it runs as-is:
 
 ```bash
 git clone https://github.com/munzzyy/toolsmell
@@ -91,12 +97,14 @@ python -m toolsmell ./tools.json      # run it directly, no install
 pip install -e .                      # or install the `toolsmell` command
 ```
 
-Once it's on PyPI: `pipx install toolsmell`.
+toolsmell is not on PyPI yet, so `pipx install toolsmell` won't work.
+Install from the repo until it is.
 
 ## Usage
 
 ```bash
 toolsmell ./tools.json              # a {"tools": [...]} manifest, the shape tools/list returns
+toolsmell ./a.json ./b.json         # lint several manifests in one run
 toolsmell ./tools.json --json       # machine-readable output
 toolsmell ./tools.json --max-score 30   # tighten the failing threshold (default 50)
 toolsmell ./tools.json --max-tool-score 40   # also fail if any single tool is this smelly
@@ -104,15 +112,23 @@ toolsmell --stdio "python my_server.py"   # spawn a live MCP server and lint its
 toolsmell --list-rules              # print every rule id and exit
 ```
 
-`--stdio` is the only thing in toolsmell that runs a subprocess. Only point
-it at a server you already trust to execute -- see
+Pass as many manifests as you like. Each one gets its own report, and the
+run exits 1 if any of them trips a gate. With `--json`, several files come
+back as a single top-level JSON array rather than a run of concatenated
+objects no parser would accept; one file still emits a bare object, so
+existing consumers are unaffected.
+
+`--stdio` and a target file are mutually exclusive: pass one or the other,
+not both. `--stdio` is also the only thing in toolsmell that runs a
+subprocess, so only point it at a server you already trust to execute -- see
 [Getting the manifest](#getting-the-manifest) for the full trust model.
 
 `--max-score N` fails the run (exit 1) if the overall smell score is at or
 above `N`. That's the whole CI story:
 
 ```yaml
-- run: pipx run toolsmell ./tools.json --max-score 30
+- run: pip install git+https://github.com/munzzyy/toolsmell@v0.1.0
+- run: toolsmell ./tools.json --max-score 30
 ```
 
 The overall score is a mean, so a mostly-clean server can bury one bad tool
@@ -258,6 +274,9 @@ MUST and a conforming client drops the tool rather than warning about it:
   `{name, description, inputSchema}`, whether that comes from a JSON file
   or a live `--stdio` server. A Python file exporting a tool list with
   nothing willing to speak MCP over stdio is out of scope.
+- It can't reach a remote server yet. There's no HTTP or SSE transport, so
+  a hosted MCP server has to go through the static-file route below: call
+  `tools/list` yourself, save the response, and lint that.
 - The severities and thresholds are toolsmell's own judgment calls, not a
   formula from the paper that motivated it. Tune `--max-score` to your
   server; a clean score means nothing obvious tripped, not that the
@@ -273,10 +292,12 @@ MUST and a conforming client drops the tool rather than warning about it:
 - `0` -- the overall smell score is under `--max-score` (default 50), and
   no single tool trips `--max-tool-score` if you set it.
 - `1` -- the overall score is at or above `--max-score`, or a single tool is
-  at or above `--max-tool-score`.
+  at or above `--max-tool-score`. With several files, any one file tripping
+  a gate fails the run.
 - `2` -- usage error: no target given, the file doesn't exist, it isn't a
-  valid tools manifest, or (with `--stdio`) the server couldn't be reached,
-  timed out, or sent back something that isn't a valid response.
+  valid tools manifest, an unknown rule id was passed to `--ignore` or
+  `--select`, or (with `--stdio`) the server couldn't be reached, timed
+  out, or sent back something that isn't a valid response.
 
 ## Contributing
 
@@ -288,7 +309,7 @@ caught, or a clean one that must stay quiet) so coverage only goes up. See
 
 ## License
 
-MIT — free to use, change, and ship, commercial or not. See [LICENSE](LICENSE).
+MIT: free to use, change, and ship, commercial or not. See [LICENSE](LICENSE).
 
 ## Support
 

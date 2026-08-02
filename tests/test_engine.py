@@ -194,6 +194,20 @@ class CLI(unittest.TestCase):
         self.assertIsInstance(payload, list)
         self.assertEqual(len(payload), 2)
 
+    def test_any_failing_file_fails_the_whole_run(self):
+        # Documented in the README's exit codes: with several files the run
+        # exits 1 if any one of them trips a gate, not just the last.
+        clean = self._write({"tools": [{
+            "name": "get_weather",
+            "description": "Fetches the weather for a place and returns the forecast; "
+                            "raises an error if the place is unknown.",
+        }]})
+        smelly = self._write(self._smelly_manifest())
+        code, _ = self._run([smelly, clean, "--no-color"])
+        self.assertEqual(code, 1)
+        code, _ = self._run([clean, clean, "--no-color"])
+        self.assertEqual(code, 0)
+
     def test_single_file_json_stays_a_bare_object(self):
         p = self._write({"tools": [{"name": "a", "description": "d"}]})
         code, out = self._run([p, "--json"])
