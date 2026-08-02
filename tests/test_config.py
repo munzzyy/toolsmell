@@ -125,8 +125,11 @@ class PyprojectTable(unittest.TestCase):
     def test_unparseable_pyproject_warns_and_keeps_every_rule(self):
         # A broken pyproject.toml belongs to some other tool as often as not.
         # Dropping the selection leaves the run stricter, never laxer, so the
-        # right move is to say so on stderr and carry on linting.
-        root, manifest = self._project("this is not [ valid toml\n")
+        # right move is to say so on stderr and carry on linting. The table
+        # header is in there deliberately: on a Python without tomllib this
+        # is the only thing that tells toolsmell it had something to read.
+        root, manifest = self._project(
+            "[tool.toolsmell]\nignore = [ this is not valid toml\n")
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
             enabled = config.resolve(config_start=str(manifest))
