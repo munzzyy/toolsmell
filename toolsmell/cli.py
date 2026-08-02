@@ -88,8 +88,30 @@ def _report(result, args, color: bool) -> bool:
     return _should_fail(result, args)
 
 
+def _force_utf8_output() -> None:
+    """Make stdout and stderr accept any character a manifest can contain.
+
+    Python picks the locale encoding for a redirected stream, which on
+    Windows is cp1252. A tool name with a CJK or Cyrillic character then
+    kills `toolsmell tools.json > out.txt` with a UnicodeEncodeError, and
+    the traceback exits 1 -- the same code as a tripped gate, so CI reads a
+    crash as a lint failure. Reconfiguring to UTF-8 with errors='replace'
+    means a character the terminal genuinely can't show comes out mangled
+    instead of taking the whole run down.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    _force_utf8_output()
 
     if args.list_rules:
         _print_rules()

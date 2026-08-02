@@ -168,6 +168,32 @@ class Tool:
         return _collect_schema(self.input_schema)[2]
 
 
+# UTF-16 and UTF-32 byte-order marks. PowerShell 5.1's `>` and Out-File
+# write UTF-16LE by default, which is exactly how a Windows user ends up
+# with one of these after saving a tools/list response by hand.
+_WIDE_BOMS = (
+    (b"\xff\xfe\x00\x00", "UTF-32LE"),
+    (b"\x00\x00\xfe\xff", "UTF-32BE"),
+    (b"\xff\xfe", "UTF-16LE"),
+    (b"\xfe\xff", "UTF-16BE"),
+)
+
+
+def _reject_wide_encoding(p, raw: bytes) -> None:
+    """Name the real problem when a file is UTF-16 or UTF-32.
+
+    The NUL bytes of UTF-16 decode as valid UTF-8, so without this check the
+    file reaches json.loads and comes back as "Expecting property name
+    enclosed in double quotes: line 1 column 2" -- which sends the user
+    hunting for a syntax error in JSON that is perfectly well formed.
+    """
+    for bom, name in _WIDE_BOMS:
+        if raw.startswith(bom):
+            raise ManifestError(
+                f"{p} looks like {name}, not UTF-8. Re-save it as UTF-8 "
+                "(in PowerShell: Out-File -Encoding utf8).")
+
+
 def load_manifest(path) -> list:
     """Read a tools manifest JSON file and return a list[Tool]."""
     p = Path(path)
@@ -180,9 +206,15 @@ def load_manifest(path) -> list:
             f"{p} is {size} bytes, over the {MAX_FILE_BYTES}-byte limit for a "
             "tools manifest")
     try:
-        text = p.read_text(encoding="utf-8")
+        raw = p.read_bytes()
     except OSError as e:
         raise ManifestError(f"cannot read {p}: {e}")
+    _reject_wide_encoding(p, raw)
+    try:
+        # utf-8-sig reads BOM-ful and BOM-less UTF-8 alike. Editors and
+        # PowerShell's Set-Content write the BOM by default, and a manifest
+        # that is otherwise perfectly good JSON should not be rejected for it.
+        text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as e:
         raise ManifestError(f"{p} is not valid UTF-8: {e}")
     try:

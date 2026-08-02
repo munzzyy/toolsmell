@@ -136,9 +136,48 @@ class LoadManifestFromDisk(unittest.TestCase):
 
     def test_non_utf8_file_raises(self):
         tmp = Path(tempfile.mkdtemp()) / "bad.json"
-        tmp.write_bytes(b"\xff\xfe\x00\x01")
+        tmp.write_bytes(b"\x80\x81\x82\x83")
         with self.assertRaises(ManifestError):
             load_manifest(tmp)
+
+
+class FileEncodings(unittest.TestCase):
+    """A manifest saved by a Windows editor is still a manifest. A BOM must
+    load, and a wide encoding must say what is actually wrong."""
+
+    def _write_bytes(self, raw: bytes) -> Path:
+        tmp = Path(tempfile.mkdtemp()) / "manifest.json"
+        tmp.write_bytes(raw)
+        return tmp
+
+    def test_utf8_bom_file_loads(self):
+        body = json.dumps({"tools": [{"name": "a", "description": "d"}]})
+        p = self._write_bytes(b"\xef\xbb\xbf" + body.encode("utf-8"))
+        tools = load_manifest(p)
+        self.assertEqual(tools[0].name, "a")
+
+    def test_utf16le_file_names_the_encoding(self):
+        body = json.dumps({"tools": [{"name": "a"}]})
+        p = self._write_bytes(b"\xff\xfe" + body.encode("utf-16-le"))
+        with self.assertRaises(ManifestError) as ctx:
+            load_manifest(p)
+        message = str(ctx.exception)
+        self.assertIn("UTF-16LE", message)
+        self.assertNotIn("not valid JSON", message)
+
+    def test_utf16be_file_names_the_encoding(self):
+        body = json.dumps({"tools": [{"name": "a"}]})
+        p = self._write_bytes(b"\xfe\xff" + body.encode("utf-16-be"))
+        with self.assertRaises(ManifestError) as ctx:
+            load_manifest(p)
+        self.assertIn("UTF-16BE", str(ctx.exception))
+
+    def test_utf32le_is_not_mistaken_for_utf16(self):
+        body = json.dumps({"tools": [{"name": "a"}]})
+        p = self._write_bytes(b"\xff\xfe\x00\x00" + body.encode("utf-32-le"))
+        with self.assertRaises(ManifestError) as ctx:
+            load_manifest(p)
+        self.assertIn("UTF-32LE", str(ctx.exception))
 
 
 if __name__ == "__main__":

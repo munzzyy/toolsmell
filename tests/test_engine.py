@@ -5,6 +5,9 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -231,6 +234,28 @@ class CLI(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             self._run(["--version"])
         self.assertEqual(cm.exception.code, 0)
+
+
+class RedirectedOutputEncoding(unittest.TestCase):
+    """A non-ASCII manifest piped to a file used to die with a
+    UnicodeEncodeError under a narrow locale encoding -- and exit 1, the same
+    code as a tripped gate, so CI blamed the manifest. Run the real CLI in a
+    subprocess with PYTHONIOENCODING forced to cp1252, which is what Windows
+    hands a redirected stdout."""
+
+    def test_cjk_manifest_survives_a_cp1252_stdout(self):
+        tmp = Path(tempfile.mkdtemp()) / "cjk.json"
+        tmp.write_text(json.dumps({"tools": [{
+            "name": "天气查询",
+            "description": "查询指定城市的天气预报。",
+        }]}, ensure_ascii=False), encoding="utf-8")
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        proc = subprocess.run(
+            [sys.executable, "-m", "toolsmell", str(tmp), "--no-color"],
+            capture_output=True, env=env, cwd=str(Path(__file__).parent.parent))
+        self.assertIn(proc.returncode, (0, 1), proc.stderr.decode("utf-8", "replace"))
+        self.assertNotIn(b"Traceback", proc.stderr)
+        self.assertNotIn(b"UnicodeEncodeError", proc.stderr)
 
 
 if __name__ == "__main__":
