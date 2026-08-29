@@ -82,8 +82,12 @@ class FetchToolsViaStdio(unittest.TestCase):
             # StdioLimitError specifically: the version probe swallows
             # protocol errors to fall back to the legacy handshake, and it
             # must never swallow a size cap the same way.
-            with self.assertRaises(mcp_stdio.StdioLimitError):
+            with self.assertRaises(mcp_stdio.StdioLimitError) as ctx:
                 fetch_tools_via_stdio(_cmd("oversized"))
+            # A live server has no way to trim its own response, unlike a
+            # static file target, so the message should point at the one
+            # thing that could actually explain it: missing pagination.
+            self.assertIn("nextCursor", str(ctx.exception))
         finally:
             mcp_stdio.MAX_RESPONSE_BYTES = original
 
@@ -263,6 +267,21 @@ class CLIStdio(unittest.TestCase):
     def test_connection_failure_is_a_usage_error_not_a_crash(self):
         code, _ = self._run(["--stdio", "no-such-binary-anywhere-on-this-machine"])
         self.assertEqual(code, 2)
+
+    def test_ignore_filters_a_stdio_result(self):
+        # --ignore/--select run through the same lint_data() a file target
+        # uses, but nothing exercised that path with --stdio before this.
+        code, out = self._run(["--stdio", _cmd("ok"), "--json", "--ignore", "TS-004"])
+        payload = json.loads(out)
+        rule_ids = [f["rule_id"] for f in payload["tools"][0]["findings"]]
+        self.assertNotIn("TS-004", rule_ids)
+        self.assertIn("TS-005", rule_ids)
+
+    def test_select_restricts_a_stdio_result_to_one_rule(self):
+        code, out = self._run(["--stdio", _cmd("ok"), "--json", "--select", "TS-004"])
+        payload = json.loads(out)
+        rule_ids = [f["rule_id"] for f in payload["tools"][0]["findings"]]
+        self.assertEqual(rule_ids, ["TS-004"])
 
 
 if __name__ == "__main__":
