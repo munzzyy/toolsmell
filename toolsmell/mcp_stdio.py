@@ -188,7 +188,10 @@ class _LineReader:
             raise StdioError(f"server did not respond within {READ_TIMEOUT:.0f}s")
         if kind == "oversized":
             raise StdioLimitError(
-                f"server response exceeded {MAX_RESPONSE_BYTES} bytes")
+                f"server response exceeded {MAX_RESPONSE_BYTES} bytes -- if "
+                "this is a real tool list rather than a misbehaving server, "
+                "the server should split it across pages with a tools/list "
+                "'nextCursor' instead of returning it all at once")
         if kind == "eof":
             raise StdioError("server closed its output before responding")
         return payload
