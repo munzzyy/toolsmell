@@ -1,4 +1,4 @@
-"""Smells that are outright spec violations: TS-013 through TS-017.
+"""Smells that are outright spec violations: TS-013 through TS-018.
 
 Everything else in toolsmell is a judgment call about whether a description
 reads well. These are not. MCP 2026-07-28 gives each of these rules a
@@ -170,5 +170,22 @@ def _check_icons(tool) -> list:
     return findings
 
 
+def _check_duplicate_name(tool, all_tools) -> list:
+    """MCP identifies a tool by its name, so two tools sharing one are not
+    two tools to a client that keeps a name-keyed registry -- one of them
+    is simply gone, and which one survives depends on iteration order the
+    server does not control."""
+    dupes = [t.index for t in all_tools if t.index != tool.index and t.name == tool.name]
+    if not dupes:
+        return []
+    indices = ", ".join(str(i) for i in sorted([tool.index] + dupes))
+    return [catalog.build(
+        "TS-018", tool=tool.name,
+        detail=f"the name '{tool.name}' is used by more than one tool "
+               f"(indices {indices}). A client that registers tools by name "
+               "keeps only one of them.")]
+
+
 def check(tool, all_tools) -> list:
-    return _check_name(tool) + _check_headers(tool) + _check_icons(tool)
+    return (_check_name(tool) + _check_headers(tool) + _check_icons(tool)
+            + _check_duplicate_name(tool, all_tools))

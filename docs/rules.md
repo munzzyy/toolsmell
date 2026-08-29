@@ -7,7 +7,7 @@ test keeps this file in sync with `toolsmell/catalog.py`, so a rule cannot
 exist without being documented here.
 
 TS-001 through TS-012 are judgment calls about whether a description and
-schema read well. TS-013 through TS-017 are not: each one is a MUST in MCP
+schema read well. TS-013 through TS-018 are not: each one is a MUST in MCP
 2026-07-28, and a conforming client drops a tool that breaks one instead of
 warning about it.
 
@@ -286,3 +286,18 @@ does not render.
 ```
 
 Fix: serve the icon over https:, or inline it as a data: URI.
+
+## TS-018
+
+Duplicate tool name. Severity medium.
+
+MCP identifies a tool by its `name`, so two tools in the same manifest with
+the same name are not two tools to a client that keeps a name-keyed
+registry -- one of them is gone, and which one survives depends on
+iteration order the server does not control.
+
+```json
+{"tools": [{"name": "search"}, {"name": "search"}]}
+```
+
+Fix: rename one of the two tools so each name in the manifest is used once.

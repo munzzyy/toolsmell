@@ -202,6 +202,32 @@ class Icons(unittest.TestCase):
         self.assertEqual(finding.param, "icons[1]")
 
 
+class DuplicateName(unittest.TestCase):
+    def test_a_lone_tool_is_quiet(self):
+        t = mk_tool("search", index=0)
+        self.assertNotIn("TS-018", conformance.check(t, [t]))
+
+    def test_two_distinct_names_are_quiet(self):
+        a, b = mk_tool("search", index=0), mk_tool("fetch", index=1)
+        self.assertNotIn("TS-018", _ids(conformance.check(a, [a, b])))
+
+    def test_a_shared_name_fires_for_both_tools(self):
+        a, b = mk_tool("search", index=0), mk_tool("search", index=1)
+        self.assertIn("TS-018", _ids(conformance.check(a, [a, b])))
+        self.assertIn("TS-018", _ids(conformance.check(b, [a, b])))
+
+    def test_the_detail_names_every_index(self):
+        a, b, c = (mk_tool("search", index=0), mk_tool("search", index=2),
+                   mk_tool("other", index=5))
+        finding = next(f for f in conformance.check(a, [a, b, c])
+                       if f.rule_id == "TS-018")
+        self.assertIn("0, 2", finding.detail)
+
+    def test_a_name_match_is_case_sensitive(self):
+        a, b = mk_tool("Search", index=0), mk_tool("search", index=1)
+        self.assertNotIn("TS-018", _ids(conformance.check(a, [a, b])))
+
+
 class NoFalsePositivesOnOrdinaryTools(unittest.TestCase):
     def test_a_plain_tool_trips_none_of_these_rules(self):
         t = mk_tool(

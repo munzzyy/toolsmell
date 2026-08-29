@@ -164,6 +164,15 @@ _RULES = [
         "required to refuse, so the icon simply never loads.",
         "Serve the icon over https:, or inline it as a data: URI.",
     ),
+    Rule(
+        "TS-018", Severity.MEDIUM,
+        "Duplicate tool name",
+        "Another tool in the same manifest has the exact same name. A "
+        "client that keys its tool registry by name keeps only one, so the "
+        "other is unreachable no matter what it does.",
+        "Rename one of the two tools so each name in the manifest is used "
+        "once.",
+    ),
 ]
 
 BY_ID = {r.id: r for r in _RULES}
