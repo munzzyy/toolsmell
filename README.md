@@ -1,7 +1,7 @@
 # toolsmell
 
 [![CI](https://github.com/munzzyy/toolsmell/actions/workflows/ci.yml/badge.svg)](https://github.com/munzzyy/toolsmell/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](pyproject.toml)
 
 ![toolsmell linting three smelly MCP tools: a vague run tool, an overloaded search_orders description, and a near-duplicate name collision, overall smell 79 of 100](docs/media/demo.svg)
@@ -309,7 +309,7 @@ caught, or a clean one that must stay quiet) so coverage only goes up. See
 
 ## License
 
-MIT: free to use, change, and ship, commercial or not. See [LICENSE](LICENSE).
+[GPL-3.0-or-later](LICENSE): you can use, study, change and share it. If you distribute a copy or a modified version, it has to stay under the GPL and come with its source. Releases up to v0.1.0 were under MIT.
 
 ## Support
 

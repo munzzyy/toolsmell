@@ -58,5 +58,5 @@ needs a new package, that's a reason to reconsider the change, not a to-do.
 
 ## License
 
-By opening a PR you agree your contribution is offered under the project's MIT license.
+By opening a PR you agree your contribution is offered under the project's GPL-3.0-or-later license.
 By opening a PR you agree your contribution is offered on those terms.
