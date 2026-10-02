@@ -93,14 +93,17 @@ def _resolve_ref(schema: dict, root: dict) -> dict:
     return schema
 
 
-def _collect_schema(schema: dict):
+def _collect_schema(root: dict):
     """Gather (properties, required_names, has_required_list) from an object
     schema, merging one level of allOf/anyOf/oneOf composition into the top
     level. A tool that splits its params across composed subschemas -- the
     shape pydantic/FastMCP emit for nested and combined models -- is then
     linted the same as one that lists them flat, instead of the rules
     failing open on the composed form. Top-level properties win over branch
-    ones; branch 'required' lists are merged in for reporting."""
+    ones; branch 'required' lists are merged in for reporting. A local $ref
+    on the root or on a branch is followed first, or a schema that is only
+    a pointer into $defs would show no params and score a perfect 0."""
+    schema = _resolve_ref(root, root)
     props = {}
     required = set()
     has_required_list = False
@@ -118,6 +121,7 @@ def _collect_schema(schema: dict):
         for branch in branches:
             if not isinstance(branch, dict):
                 continue
+            branch = _resolve_ref(branch, root)
             b_props = branch.get("properties")
             if isinstance(b_props, dict):
                 for name, sub in b_props.items():

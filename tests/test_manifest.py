@@ -107,6 +107,66 @@ class ToolParams(unittest.TestCase):
         self.assertFalse(without_key[0].has_required_field)
 
 
+def _args(required=None):
+    schema = {"type": "object", "properties": {
+        "origin": {"type": "string"}, "dest": {"type": "string"}}}
+    if required is not None:
+        schema["required"] = required
+    return schema
+
+
+class RefOnTheSchemaRoot(unittest.TestCase):
+    """A schema that is only a pointer into $defs, or composed from
+    pointers, has to show the same params as the flat one. Seeing none
+    gives the tool a perfect score it did nothing to earn."""
+
+    def _tool(self, schema):
+        return parse_tools({"tools": [{"name": "t", "inputSchema": schema}]})[0]
+
+    def test_root_ref_into_definitions(self):
+        tool = self._tool({"$ref": "#/definitions/Args", "definitions": {"Args": _args()}})
+        self.assertEqual({p.name for p in tool.params}, {"origin", "dest"})
+        self.assertFalse(tool.has_required_field)
+
+    def test_ref_inside_allof_branch(self):
+        tool = self._tool({"type": "object", "allOf": [{"$ref": "#/$defs/Args"}],
+                           "$defs": {"Args": _args()}})
+        self.assertEqual({p.name for p in tool.params}, {"origin", "dest"})
+
+    def test_required_list_arrives_through_a_ref(self):
+        tool = self._tool({"type": "object", "anyOf": [{"$ref": "#/$defs/Args"}],
+                           "$defs": {"Args": _args(required=["origin"])}})
+        self.assertTrue(tool.has_required_field)
+        by_name = {p.name: p for p in tool.params}
+        self.assertTrue(by_name["origin"].required)
+        self.assertFalse(by_name["dest"].required)
+
+    def test_param_refs_still_resolve_against_the_original_root(self):
+        tool = self._tool({"$ref": "#/$defs/Args", "$defs": {
+            "Args": {"type": "object", "properties": {"where": {"$ref": "#/$defs/Where"}}},
+            "Where": {"type": "string", "description": "City name."}}})
+        self.assertEqual(tool.params[0].description, "City name.")
+
+    def test_ref_cycle_on_the_root_terminates(self):
+        tool = self._tool({"$ref": "#/$defs/A", "$defs": {"A": {"$ref": "#/$defs/A"}}})
+        self.assertEqual(tool.params, [])
+
+    def test_ref_wrapped_tool_scores_like_the_flat_one(self):
+        desc = "Books a flight and returns a booking id; raises an error on invalid input."
+        flat = lint_path(self._file({"name": "t", "description": desc, "inputSchema": _args()}))
+        wrapped = lint_path(self._file({"name": "t", "description": desc, "inputSchema": {
+            "$ref": "#/definitions/Args", "definitions": {"Args": _args()}}}))
+        self.assertGreater(flat.score, 0)
+        self.assertEqual(wrapped.score, flat.score)
+        self.assertEqual(sorted(f.rule_id for f in wrapped.findings),
+                         sorted(f.rule_id for f in flat.findings))
+
+    def _file(self, tool) -> Path:
+        tmp = Path(tempfile.mkdtemp()) / "tools.json"
+        tmp.write_text(json.dumps({"tools": [tool]}), encoding="utf-8")
+        return tmp
+
+
 class LoadManifestFromDisk(unittest.TestCase):
     def _write(self, text: str) -> Path:
         tmp = Path(tempfile.mkdtemp()) / "manifest.json"

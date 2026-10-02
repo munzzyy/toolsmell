@@ -1,0 +1,21 @@
+{
+  "tools": [
+    {
+      "name": "book_flight",
+      "description": "Books a flight and returns a booking id; raises an error on invalid input.",
+      "inputSchema": {
+        "$ref": "#/definitions/BookFlightArgs",
+        "definitions": {
+          "BookFlightArgs": {
+            "type": "object",
+            "properties": {
+              "origin": { "type": "string" },
+              "dest": { "type": "string" },
+              "date": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
