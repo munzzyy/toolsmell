@@ -4,6 +4,7 @@ failure points straight at the rule, not at the whole pipeline."""
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import itertools
 import json
@@ -555,6 +556,21 @@ class MentionParity(unittest.TestCase):
         self.assertIn("TS-005 did not check 1 parameter", result.notes[0])
         full = lint(tool)
         self.assertEqual(full.notes, [])
+
+    def test_budget_note_is_one_line_for_many_tools(self):
+        desc = "Takes x and y."
+        tools = [{"name": "t" + hashlib.sha1(str(i).encode()).hexdigest(),
+                  "description": desc, "inputSchema": {
+                      "type": "object", "properties": {"x.y": {}}, "required": []}}
+                 for i in range(10000)]
+        started = time.monotonic()
+        with mock.patch.object(schema, "SLOW_PATH_CHARS", 10 * 2 * len(desc)):
+            result = lint(*tools)
+        self.assertLess(time.monotonic() - started, 10.0)
+        self.assertEqual(len(result.notes), 1)
+        self.assertIn("did not check 9,990 parameter name(s) in 9,990 tool(s)",
+                      result.notes[0])
+        self.assertIn(f"starting with '{tools[10]['name']}'", result.notes[0])
 
 
 class MissingExample(unittest.TestCase):

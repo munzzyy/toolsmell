@@ -73,10 +73,12 @@ def spend(all_tools, key: str, start: int, amount: int) -> bool:
     return True
 
 
-def note(all_tools, rule_id: str, message: str) -> None:
+def note(all_tools, rule_id: str, message: str, key=None) -> None:
+    """One stderr line per (rule_id, key), keyed by the message by default.
+    A later note under the same key replaces the text."""
     notes = getattr(all_tools, "notes", None)
     if notes is not None:
-        notes[(rule_id, message)] = message
+        notes[(rule_id, message if key is None else key)] = message
 
 
 # With IGNORECASE this class also takes the four letters below, as mentions() does.

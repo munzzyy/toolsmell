@@ -6,8 +6,8 @@ from __future__ import annotations
 import re
 
 from .. import catalog
-from ._util import (Tokens, is_one_token, mentions, note, spend,
-                    split_name_words, token_pieces)
+from ._util import (Tokens, is_one_token, manifest_index, mentions, note,
+                    spend, split_name_words, token_pieces)
 
 _ENUM_PHRASE = re.compile(
     r"\b(one of|either|allowed values?|options? (?:are|include)|must be)\b",
@@ -73,6 +73,10 @@ def _mentioned_fast(tokens: Tokens, term: str, all_tools, skipped: list) -> bool
     return _mentioned(tokens.text, term)
 
 
+def _skip_tally(all_tools) -> dict:
+    return {"params": 0, "tools": 0, "first": None}
+
+
 def _param_mentioned_fast(tokens: Tokens, name: str, all_tools, skipped: list) -> bool:
     if _mentioned_fast(tokens, name, all_tools, skipped):
         return True
@@ -109,11 +113,17 @@ def check(tool, all_tools) -> list:
                     detail=f"'{tool.name}' parameter '{p.name}' is never "
                            "mentioned in the description."))
         if skipped:
+            tally = manifest_index(all_tools, _skip_tally)
+            tally["params"] += len(skipped)
+            tally["tools"] += 1
+            if tally["first"] is None:
+                tally["first"] = tool.name
             note(all_tools, "TS-005",
-                 f"TS-005 did not check {len(skipped)} parameter name(s) of "
-                 f"'{tool.name}' against its description: the manifest used "
-                 f"up the {SLOW_PATH_CHARS:,}-character budget for "
-                 "names with punctuation in them.")
+                 f"TS-005 did not check {tally['params']:,} parameter name(s) "
+                 f"in {tally['tools']:,} tool(s) against their descriptions, "
+                 f"starting with '{tally['first']}': the manifest used up the "
+                 f"{SLOW_PATH_CHARS:,}-character budget for names with "
+                 "punctuation in them.", key="budget")
 
     for p in params:
         if not p.description.strip():
