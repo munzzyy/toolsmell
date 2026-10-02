@@ -189,5 +189,71 @@ class CLIWiring(unittest.TestCase):
         self.assertEqual(cm.exception.code, 2)
 
 
+class PerManifestConfig(unittest.TestCase):
+    """pre-commit hands every matching file to one invocation. Each manifest
+    has to be linted by the pyproject.toml nearest to it, not by whichever
+    project's file happened to come first on the command line."""
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        manifest = json.dumps({"tools": [{"name": "fetch_record",
+                                          "description": "Fetches the record and returns it."}]})
+        self.paths = {}
+        for name, table in (("projA", 'ignore = ["TS-008"]'), ("projB", 'select = ["TS-008"]')):
+            project = self.root / name
+            project.mkdir()
+            (project / "pyproject.toml").write_text(f"[tool.toolsmell]\n{table}\n",
+                                                    encoding="utf-8")
+            (project / "tools.json").write_text(manifest, encoding="utf-8")
+            self.paths[name] = str(project / "tools.json")
+
+    def _rules_by_project(self, argv):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            code = cli.main(argv + ["--json", "--max-score", "1000"])
+        self.assertEqual(code, 0)
+        return {Path(r["source"]).parent.name:
+                [f["rule_id"] for t in r["tools"] for f in t["findings"]]
+                for r in json.loads(out.getvalue())}
+
+    def test_each_manifest_gets_its_own_table_in_either_order(self):
+        if config.tomllib is None:
+            self.skipTest("no stdlib TOML parser before Python 3.11")
+        a, b = self.paths["projA"], self.paths["projB"]
+        expected = {"projA": [], "projB": ["TS-008"]}
+        self.assertEqual(self._rules_by_project([a, b]), expected)
+        self.assertEqual(self._rules_by_project([b, a]), expected)
+
+    def test_command_line_still_overrides_every_table(self):
+        a, b = self.paths["projA"], self.paths["projB"]
+        self.assertEqual(self._rules_by_project([a, b, "--select", "TS-008"]),
+                         {"projA": ["TS-008"], "projB": ["TS-008"]})
+
+    def test_bad_id_in_a_later_table_fails_before_any_report(self):
+        if config.tomllib is None:
+            self.skipTest("no stdlib TOML parser before Python 3.11")
+        (self.root / "projB" / "pyproject.toml").write_text(
+            '[tool.toolsmell]\nselect = ["TS-999"]\n', encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main([self.paths["projA"], self.paths["projB"]])
+        self.assertEqual(code, 2)
+        self.assertEqual(out.getvalue(), "")
+        self.assertIn("TS-999", err.getvalue())
+
+    def test_a_shared_table_warns_once(self):
+        # Warns on every Python: 3.11+ cannot parse it, 3.9/3.10 cannot read it.
+        project = self.root / "projA"
+        (project / "pyproject.toml").write_text(
+            "[tool.toolsmell]\nignore = [ not toml\n", encoding="utf-8")
+        second = project / "more-tools.json"
+        second.write_text((project / "tools.json").read_text(encoding="utf-8"),
+                          encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            cli.main([self.paths["projA"], str(second), "--max-score", "1000"])
+        self.assertEqual(err.getvalue().count("pyproject.toml"), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

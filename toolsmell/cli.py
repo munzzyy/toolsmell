@@ -98,6 +98,23 @@ def _report(result, args, color: bool) -> bool:
     return _should_fail(result, args)
 
 
+def _resolve_selections(args) -> list:
+    """The enabled rule set for each target, from the pyproject.toml nearest
+    to it (the working directory for --stdio). One lookup per pyproject.toml,
+    so its warnings print once."""
+    if args.stdio:
+        return [config.resolve(args.ignore, args.select, config_start=os.getcwd())]
+    flags_set = args.ignore is not None or args.select is not None
+    cache = {}
+    out = []
+    for target in args.target:
+        key = None if flags_set else config.find_pyproject(target)
+        if key not in cache:
+            cache[key] = config.resolve(args.ignore, args.select, config_start=target)
+        out.append(cache[key])
+    return out
+
+
 def _force_utf8_output() -> None:
     """Make stdout and stderr accept any character a manifest can contain.
 
@@ -139,13 +156,9 @@ def main(argv=None) -> int:
 
     color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
-    # Rule selection is resolved once, up front: a bad rule id should fail
-    # before any file is read, not halfway through a multi-file run. The
-    # pyproject.toml search starts next to the first manifest, or in the
-    # working directory for --stdio.
-    config_start = args.target[0] if args.target else os.getcwd()
+    # Resolved up front so a bad rule id fails before any report prints.
     try:
-        enabled = config.resolve(args.ignore, args.select, config_start=config_start)
+        selections = _resolve_selections(args)
     except config.ConfigError as e:
         print(f"toolsmell: {e}", file=sys.stderr)
         return 2
@@ -153,7 +166,8 @@ def main(argv=None) -> int:
     if args.stdio:
         try:
             data = fetch_tools_via_stdio(args.stdio)
-            result = lint_data(data, source=f"stdio:{args.stdio}", enabled=enabled)
+            result = lint_data(data, source=f"stdio:{args.stdio}",
+                               enabled=selections[0])
         except (StdioError, ManifestError) as e:
             print(f"toolsmell: {e}", file=sys.stderr)
             return 2
@@ -161,7 +175,7 @@ def main(argv=None) -> int:
 
     exit_code = 0
     results = []
-    for target_path in args.target:
+    for target_path, enabled in zip(args.target, selections):
         if not os.path.exists(target_path):
             print(f"toolsmell: no such file: {target_path}", file=sys.stderr)
             return 2

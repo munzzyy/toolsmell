@@ -159,8 +159,9 @@ ignore = ["TS-003", "TS-008"]
 ```
 
 toolsmell looks for the nearest `pyproject.toml` at or above the manifest
-it's linting (the working directory for `--stdio`). `--ignore` and
-`--select` on the command line override the file. Reading the table needs
+it's linting (the working directory for `--stdio`). With several manifests
+in one run, each one gets its own nearest file. `--ignore` and `--select`
+on the command line override the file. Reading the table needs
 Python 3.11+ for `tomllib`, and toolsmell has no runtime dependencies, so
 on 3.9 and 3.10 it prints a warning to stderr and runs every rule instead
 of pretending the file was empty.
