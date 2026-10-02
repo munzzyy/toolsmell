@@ -42,17 +42,48 @@ _ERROR_WORDS = (
 # are deliberately excluded -- they describe the outcome, not a mode of
 # operation, and counting them would make TS-011 fire on any well-described
 # tool.
-_ACTION_VERBS = {
-    "create", "creates", "delete", "deletes", "update", "updates", "fetch",
-    "fetches", "list", "lists", "search", "searches", "send", "sends",
-    "remove", "removes", "modify", "modifies", "get", "gets", "set",
-    "sets", "generate", "generates", "convert", "converts", "upload",
-    "uploads", "download", "downloads", "sync", "syncs", "merge",
-    "merges", "validate", "validates", "parse", "parses", "publish",
-    "publishes", "cancel", "cancels", "schedule", "schedules",
-}
+_ACTION_VERBS = (
+    "create", "delete", "update", "fetch", "list", "search", "send", "remove",
+    "modify", "get", "set", "generate", "convert", "upload", "download",
+    "sync", "merge", "validate", "parse", "publish", "cancel", "schedule",
+)
+
+
+def _third_person(verb: str) -> str:
+    if verb.endswith("y"):
+        return verb[:-1] + "ies"
+    if verb.endswith(("ch", "sh")):
+        return verb + "es"
+    return verb + "s"
+
+
+_VERB_BASE = {form: verb for verb in _ACTION_VERBS
+              for form in (verb, _third_person(verb))}
+
+# Not "this" or "that": "this deletes" and "fields that get set" are verbs.
+_DETERMINERS = {"a", "an", "the", "its", "their", "your", "my", "our",
+                "each", "every", "any", "no"}
+_TOKEN = re.compile(r"\w+")
 
 _JOINER = re.compile(r"\band\b|\bor\b", re.IGNORECASE)
+
+
+def _actions(desc: str) -> set:
+    """The distinct action verbs a description uses, by base form, so
+    'lists' and 'list' count once. A verb word right after a determiner,
+    or in its base form two words after one ("an empty list"), is a noun."""
+    tokens = _TOKEN.findall(desc.lower())
+    found = set()
+    for i, token in enumerate(tokens):
+        base = _VERB_BASE.get(token)
+        if base is None:
+            continue
+        if i >= 1 and tokens[i - 1] in _DETERMINERS:
+            continue
+        if token == base and i >= 2 and tokens[i - 2] in _DETERMINERS:
+            continue
+        found.add(base)
+    return found
 
 
 def _is_vague_only(desc: str) -> bool:
@@ -100,8 +131,7 @@ def check(tool, all_tools) -> list:
             detail=f"'{tool.name}' description never says what happens on "
                    "bad input or failure."))
 
-    lowered = desc.lower()
-    verb_hits = {v for v in _ACTION_VERBS if re.search(rf"\b{re.escape(v)}\b", lowered)}
+    verb_hits = _actions(desc)
     joiners = len(_JOINER.findall(desc))
     if len(verb_hits) >= 4 or (len(verb_hits) >= 2 and joiners >= 2):
         findings.append(catalog.build(

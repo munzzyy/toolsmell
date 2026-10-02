@@ -589,6 +589,44 @@ class OverloadedTool(unittest.TestCase):
         t = mk_tool("t", description="Fetches a user's name and email address and returns them as JSON.")
         self.assertNotIn("TS-011", _ids(description.check(t, [t])))
 
+    def test_single_purpose_descriptions_do_not_fire(self):
+        # These read as (list, lists), (list, searches) and (fetches, upload).
+        for desc in (
+                "Lists open invoices for an account and returns them as a list, "
+                "or an error if the account does not exist.",
+                "Searches orders by customer email and returns a list of matching "
+                "orders, or an empty list if none match. Raises an error on an "
+                "invalid email.",
+                "Fetches a file and returns its contents; raises an error if the "
+                "path is invalid or the upload has not finished."):
+            with self.subTest(desc=desc[:30]):
+                t = mk_tool("t", description=desc)
+                self.assertNotIn("TS-011", _ids(description.check(t, [t])))
+
+    def test_forms_of_one_verb_count_once(self):
+        self.assertEqual(description._actions("Lists users, or list them by team."), {"list"})
+        self.assertEqual(description._actions("Searches and search, fetches and fetch."),
+                         {"search", "fetch"})
+        self.assertEqual(description._actions("Modifies or modify."), {"modify"})
+
+    def test_a_verb_word_after_a_determiner_is_a_noun(self):
+        self.assertEqual(description._actions("Returns a list."), set())
+        self.assertEqual(description._actions("Waits for the upload."), set())
+        self.assertEqual(description._actions("Returns an empty list."), set())
+        self.assertEqual(description._actions("Synchronizes the order list."), set())
+
+    def test_a_verb_after_a_subject_still_counts(self):
+        # Only a base form two words after a determiner reads as a noun.
+        self.assertEqual(description._actions("This tool searches orders."), {"search"})
+        self.assertEqual(description._actions("Fields that get set."), {"get", "set"})
+        self.assertEqual(description._actions("The tool lists files."), {"list"})
+
+    def test_detail_lists_each_verb_once(self):
+        t = mk_tool("t", description="Creates, updates, deletes, and lists records "
+                                     "and then lists them again.")
+        detail = next(f.detail for f in description.check(t, [t]) if f.rule_id == "TS-011")
+        self.assertIn("(create, delete, list, update)", detail)
+
 
 class EnumWorthyFreeText(unittest.TestCase):
     def test_three_quoted_tokens_fires(self):

@@ -78,8 +78,8 @@
 <text x="16.0" y="1013" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>
 <text x="41.3" y="1013" fill="#e06c75" font-weight="normal" xml:space="preserve"> MEDIUM </text>
 <text x="108.6" y="1013" fill="#abb2bf" font-weight="normal" xml:space="preserve"> Overloaded tool description  [TS-011]</text>
-<text x="16.0" y="1032" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; description names multiple actions (get, search, searches, set) --</text>
-<text x="100.2" y="1051" fill="#abb2bf" font-weight="normal" xml:space="preserve">looks like it does more than one job.</text>
+<text x="16.0" y="1032" fill="#abb2bf" font-weight="normal" xml:space="preserve">          &#x27;search_orders&#x27; description names multiple actions (get, search, set) -- looks like it</text>
+<text x="100.2" y="1051" fill="#abb2bf" font-weight="normal" xml:space="preserve">does more than one job.</text>
 <text x="16.0" y="1070" fill="#5c6370" font-weight="normal" xml:space="preserve">          fix: Split the tool into one tool per action, or narrow the description to the single</text>
 <text x="142.3" y="1089" fill="#5c6370" font-weight="normal" xml:space="preserve">thing it actually does.</text>
 <text x="16.0" y="1108" fill="#abb2bf" font-weight="normal" xml:space="preserve">   </text>

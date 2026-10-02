@@ -193,6 +193,11 @@ The description names four or more distinct action verbs, or two or more
 action verbs joined by "and"/"or" at least twice. Either shape usually means
 the tool does too much for an agent to reliably pick the right mode.
 
+Forms of one verb count once, so "Lists ... as a list" is one action. A verb
+word right after an article or a possessive ("a list", "the upload") is read
+as a noun and doesn't count, and neither is a base form two words after one
+("an empty list", "the order list").
+
 ```json
 {"description": "Creates, updates, deletes, and lists records, or sends a summary email."}
 ```

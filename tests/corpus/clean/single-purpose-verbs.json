@@ -1,0 +1,16 @@
+{
+  "tools": [
+    {
+      "name": "list_invoices",
+      "description": "Lists open invoices for an account and returns them as a list, or an error if the account does not exist."
+    },
+    {
+      "name": "search_orders",
+      "description": "Searches orders by customer email and returns a list of matching orders, or an empty list if none match. Raises an error on an invalid email."
+    },
+    {
+      "name": "fetch_file",
+      "description": "Fetches a file and returns its contents; raises an error if the path is invalid or the upload has not finished."
+    }
+  ]
+}
