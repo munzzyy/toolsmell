@@ -11,6 +11,10 @@ schema read well. TS-013 through TS-018 are not: each one is a MUST in MCP
 2026-07-28, and a conforming client drops a tool that breaks one instead of
 warning about it.
 
+Did a rule fire on a description that reads fine, or miss a real smell?
+Open an issue at https://github.com/munzzyy/toolsmell/issues with the
+smallest manifest that shows it.
+
 ## TS-001
 
 Missing or empty description. Severity medium.

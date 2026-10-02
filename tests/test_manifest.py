@@ -330,7 +330,7 @@ class HostileJson(unittest.TestCase):
         self.assertIn("levels deep", str(ctx.exception))
 
     def test_nesting_the_parser_accepts_is_still_capped(self):
-        # 3.12+ parses this, then overflows the stack in the TS-014 repr().
+        # 3.14 parses nests deep enough to overflow repr() in TS-014; the cap has to catch them.
         tool = ('{"name": "t", "inputSchema": {"properties": {"a": '
                 '{"type": "string", "x-mcp-header": ' + _nest(MAX_JSON_DEPTH) + "}}}}")
         p = self._write('{"tools": [' + tool + "]}")

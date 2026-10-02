@@ -37,7 +37,8 @@ These can change a result you already rely on.
 - TS-013 to TS-018 check tool names, `x-mcp-header` values, icon sources and
   duplicate names against MCP 2026-07-28.
 - A file can hold a whole saved JSON-RPC response or a bare array of tools,
-  not only `{"tools": [...]}`.
+  not only `{"tools": [...]}`. A file with a `nextCursor` is one page of a
+  longer list, and stderr says the other pages are missing.
 - `scripts/render_demo.py` redraws the README demo from a live run.
 
 ### Fixed
@@ -52,6 +53,8 @@ These can change a result you already rely on.
 - Param rules no longer fail open or misfire on composed schemas
   (`allOf`/`anyOf`/`oneOf`), nullable strings, `$ref` parameters or a
   non-list `required`.
+- An object or array inside `required` no longer ends the run in a
+  traceback.
 - TS-005 accepts a longer word that starts with the parameter name
   ("repository" for `repo`). It no longer counts `id` as mentioned inside
   "Provide".

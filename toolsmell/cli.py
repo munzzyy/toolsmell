@@ -37,7 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "target", nargs="*",
-        help="path to a tools/list JSON file (a {\"tools\": [...]} manifest)")
+        help="path to a saved tools/list JSON file: the result object "
+             "({\"tools\": [...]}), the whole JSON-RPC response, or a bare "
+             "array of tools")
     p.add_argument(
         "--stdio", metavar="CMD",
         help="run CMD as a live MCP server and lint its real tools/list response, "

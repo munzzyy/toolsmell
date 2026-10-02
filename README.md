@@ -97,7 +97,7 @@ python -m toolsmell ./tools.json      # run it directly, no install
 pip install -e .                      # or install the `toolsmell` command
 ```
 
-toolsmell is not on PyPI yet, so `pipx install toolsmell` won't work.
+toolsmell is not on PyPI yet, so `pipx install toolsmell` will not work.
 Install from the repo until it is.
 
 ## Usage
@@ -140,7 +140,7 @@ tripped it (on stderr) so a red CI run points straight at what to fix.
 ## Selecting rules
 
 Not every rule suits every server. `--ignore` switches rules off, `--select`
-switches everything else off, and the two can't be combined:
+switches everything else off, and the two cannot be combined:
 
 ```bash
 toolsmell ./tools.json --ignore TS-003,TS-008   # skip the return-words and error-words checks
@@ -170,7 +170,7 @@ of pretending the file was empty.
 ## Getting the manifest
 
 Most MCP servers define their tools in code, not as a file sitting on
-disk, so there's usually no `tools.json` lying around to point at. Two
+disk, so there is usually no `tools.json` lying around to point at. Two
 ways to get one:
 
 **`--stdio` (the easy way).** Point toolsmell at the command that starts
@@ -184,11 +184,11 @@ toolsmell --stdio "node server.js --port 0"
 
 Servers on both sides of the MCP 2026-07-28 revision work. toolsmell opens
 with a `server/discover` probe and drops back to the older `initialize` +
-`notifications/initialized` handshake if the server hasn't heard of it, so
-it doesn't need to be told which revision yours speaks. The one case it
-won't retry is a server that answers the probe with
+`notifications/initialized` handshake if the server has not heard of it, so
+it does not need to be told which revision yours speaks. The one case it
+will not retry is a server that answers the probe with
 `UnsupportedProtocolVersionError`: that server does speak the new protocol
-and has turned down toolsmell's version, and the old handshake wouldn't fix
+and has turned down toolsmell's version, and the old handshake would not fix
 that. The probe waits 5 seconds. A server that answers it later, say after
 a slow `npx` or `uvx` start, still gets the new protocol, because
 toolsmell keeps listening for that answer while it tries the old one.
@@ -210,7 +210,7 @@ already is -- it's data, not code, and it goes through the exact same
 parser. toolsmell also enforces a wall-clock timeout on the whole exchange
 (20 seconds, or whatever `--timeout` says) and a 5 MB cap on everything
 the server writes, and kills the process afterward either way, so a hung or
-misbehaving server can't wedge the run.
+misbehaving server cannot wedge the run.
 
 **A static file (the manual way).** Call the server's `tools/list` method
 yourself and save what comes back, or paste the tools array into a file by
@@ -222,7 +222,7 @@ lints them all the same:
 - a bare array of tools, `[...]`
 
 A saved error response exits 2 and quotes the server's message. If the
-response carries a `nextCursor`, it's one page of a longer list: toolsmell
+response carries a `nextCursor`, it is one page of a longer list: toolsmell
 lints the tools on it and says on stderr that the rest are missing.
 
 ## pre-commit
@@ -265,7 +265,7 @@ MUST and a conforming client drops the tool rather than warning about it:
 
 - Tool names outside the 1 to 128 characters of `A-Za-z0-9_.-` the spec
   allows.
-- `x-mcp-header` values that aren't usable HTTP field names, including ones
+- `x-mcp-header` values that are not usable HTTP field names, including ones
   carrying a line break.
 - Two parameters mapped to header names that differ only in case.
 - `x-mcp-header` on an object, array, or `number` parameter.
@@ -288,8 +288,8 @@ MUST and a conforming client drops the tool rather than warning about it:
   `{name, description, inputSchema}`, whether that comes from a JSON file
   or a live `--stdio` server. A Python file exporting a tool list with
   nothing willing to speak MCP over stdio is out of scope.
-- It can't reach a remote server yet. There's no HTTP or SSE transport, so
-  a hosted MCP server has to go through the static-file route below: call
+- It cannot reach a remote server yet. There is no HTTP or SSE transport, so
+  a hosted MCP server has to go through the static-file route above: call
   `tools/list` yourself, save the response, and lint that.
 - The severities and thresholds are toolsmell's own judgment calls, not a
   formula from the paper that motivated it. Tune `--max-score` to your
@@ -308,10 +308,10 @@ MUST and a conforming client drops the tool rather than warning about it:
 - `1` -- the overall score is at or above `--max-score`, or a single tool is
   at or above `--max-tool-score`. With several files, any one file tripping
   a gate fails the run.
-- `2` -- usage error: no target given, the file doesn't exist, it isn't a
+- `2` -- usage error: no target given, the file does not exist, it is not a
   valid tools manifest, an unknown rule id was passed to `--ignore` or
-  `--select`, or (with `--stdio`) the server couldn't be reached, timed
-  out, or sent back something that isn't a valid response.
+  `--select`, or (with `--stdio`) the server could not be reached, timed
+  out, or sent back something that is not a valid response.
 
 ## Roadmap
 

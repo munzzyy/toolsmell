@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking at this. It's a small, single-purpose tool and
+Thanks for looking at this. It is a small, single-purpose tool and
 contributions are welcome.
 
 ## Setup
@@ -10,7 +10,7 @@ git clone https://github.com/munzzyy/toolsmell
 cd toolsmell
 ```
 
-There's nothing to install. toolsmell is pure standard library, and so is
+There is nothing to install. toolsmell is pure standard library, and so is
 its test suite.
 
 ## Running the tests
