@@ -270,6 +270,7 @@ MUST and a conforming client drops the tool rather than warning about it:
 - Two parameters mapped to header names that differ only in case.
 - `x-mcp-header` on an object, array, or `number` parameter.
 - Tool icons whose `src` is not an `https:` or `data:` URI.
+- Two tools in one manifest with the same name.
 
 ## What it does not do
 

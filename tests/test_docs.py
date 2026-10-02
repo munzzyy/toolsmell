@@ -11,6 +11,7 @@ import sys
 import unittest
 from pathlib import Path
 
+import toolsmell
 from toolsmell.catalog import all_rules
 
 ROOT = Path(__file__).parent.parent
@@ -34,6 +35,17 @@ class RulesDoc(unittest.TestCase):
 
     def test_doc_covers_every_rule_count(self):
         self.assertEqual(len(_rule_ids_in_doc()), len(all_rules()))
+
+
+class VersionAndChangelog(unittest.TestCase):
+    def test_pyproject_and_package_agree(self):
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        version = re.search(r'^version = "([^"]+)"$', pyproject, re.M).group(1)
+        self.assertEqual(version, toolsmell.__version__)
+
+    def test_changelog_has_the_current_version(self):
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn(f"\n## [{toolsmell.__version__}]", changelog)
 
 
 def _live(example: str) -> str:
