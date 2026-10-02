@@ -32,7 +32,8 @@ These can change a result you already rely on.
   quotes the server's exit status and stderr when it fails to start.
 - `--timeout SECONDS` sets the time budget for a `--stdio` run (default 20).
 - `--ignore` and `--select` switch rules off or on, from the command line or
-  a `[tool.toolsmell]` table in `pyproject.toml`.
+  a `[tool.toolsmell]` table in `pyproject.toml`. An empty `--select` exits
+  2, so an unset CI variable can't switch every rule off.
 - `--max-tool-score N` fails the run when any single tool is that smelly.
 - TS-013 to TS-018 check tool names, `x-mcp-header` values, icon sources and
   duplicate names against MCP 2026-07-28.

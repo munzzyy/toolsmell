@@ -53,6 +53,16 @@ class Resolve(unittest.TestCase):
         with self.assertRaises(config.ConfigError):
             config.resolve("TS-001", "TS-002")
 
+    def test_empty_select_is_an_error_not_every_rule_off(self):
+        for raw in ("", ",", " ", " , "):
+            with self.subTest(select=raw):
+                with self.assertRaises(config.ConfigError) as ctx:
+                    config.resolve(None, raw)
+                self.assertIn("--select needs at least one rule id", str(ctx.exception))
+
+    def test_empty_ignore_still_means_every_rule(self):
+        self.assertEqual(config.resolve("", None), frozenset(BY_ID))
+
 
 class Filtering(unittest.TestCase):
     def test_ignored_rule_leaves_the_findings(self):
@@ -104,6 +114,12 @@ class PyprojectTable(unittest.TestCase):
         manifest.write_text(json.dumps({"tools": [_smelly()]}), encoding="utf-8")
         self.assertEqual(config.resolve(config_start=str(manifest)),
                          frozenset({"TS-002"}))
+
+    def test_empty_select_in_the_table_keeps_every_rule(self):
+        if config.tomllib is None:
+            self.skipTest("no stdlib TOML parser before Python 3.11")
+        root, manifest = self._project("[tool.toolsmell]\nselect = []\n")
+        self.assertIsNone(config.resolve(config_start=str(manifest)))
 
     def test_pyproject_without_the_table_changes_nothing(self):
         root, manifest = self._project('[project]\nname = "someone-elses"\n')
@@ -180,6 +196,20 @@ class CLIWiring(unittest.TestCase):
             code, _ = self._run([self._manifest(), "--ignore", "TS-999"])
         self.assertEqual(code, 2)
         self.assertIn("TS-999", err.getvalue())
+
+    def test_empty_select_exits_two_before_any_report(self):
+        p = self._manifest()
+        for raw in ("", ",", " "):
+            with self.subTest(select=raw):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    code, out = self._run([p, "--no-color", "--select", raw])
+                self.assertEqual(code, 2)
+                self.assertEqual(out, "")
+                lines = err.getvalue().splitlines()
+                self.assertEqual(len(lines), 1)
+                self.assertTrue(lines[0].startswith(
+                    "toolsmell: --select needs at least one rule id"), lines[0])
 
     def test_ignore_and_select_together_is_a_usage_error(self):
         with self.assertRaises(SystemExit) as cm:

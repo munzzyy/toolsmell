@@ -150,7 +150,9 @@ toolsmell ./tools.json --select TS-001,TS-005   # run only these two
 A switched-off rule stops reporting **and stops counting toward the smell
 score**, so ignoring a rule you disagree with also takes its weight out of
 whatever `--max-score` is gating on. An unknown rule id exits 2 and names
-it rather than being quietly skipped.
+it rather than being quietly skipped. A `--select` with no ids in it,
+which is what an unset CI variable expands to, exits 2 too, instead of
+switching every rule off and passing any manifest.
 
 To make it stick, put the list in your `pyproject.toml`:
 
@@ -310,8 +312,9 @@ MUST and a conforming client drops the tool rather than warning about it:
   a gate fails the run.
 - `2` -- usage error: no target given, the file does not exist, it is not a
   valid tools manifest, an unknown rule id was passed to `--ignore` or
-  `--select`, or (with `--stdio`) the server could not be reached, timed
-  out, or sent back something that is not a valid response.
+  `--select`, `--select` was empty, or (with `--stdio`) the server could
+  not be reached, timed out, or sent back something that is not a valid
+  response.
 
 ## Roadmap
 

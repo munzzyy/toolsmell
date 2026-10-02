@@ -135,7 +135,11 @@ def resolve(ignore=None, select=None, config_start=None) -> "frozenset | None":
     if ignore is not None:
         return frozenset(set(BY_ID) - _parse_ids(ignore, "--ignore"))
     if select is not None:
-        return frozenset(_parse_ids(select, "--select"))
+        selected = _parse_ids(select, "--select")
+        if not selected:
+            # An unset CI variable expands to "", which would switch every rule off.
+            raise ConfigError("--select needs at least one rule id, got none")
+        return frozenset(selected)
     if config_start is None:
         return None
     file_ignore, file_select = from_pyproject(config_start)
