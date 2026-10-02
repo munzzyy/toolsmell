@@ -29,7 +29,8 @@ These can change a result you already rely on.
 - `--stdio CMD` runs a live MCP server and lints its real `tools/list`
   response. It speaks MCP 2026-07-28 (`server/discover`) and falls back to
   the older `initialize` handshake. It follows `nextCursor` pagination and
-  quotes the server's exit status and stderr when it fails to start.
+  quotes the server's exit status and stderr when it fails to start. Error
+  text and stderr from the server get the same escaping as the report.
 - `--timeout SECONDS` sets the time budget for a `--stdio` run (default 20).
 - `--ignore` and `--select` switch rules off or on, from the command line or
   a `[tool.toolsmell]` table in `pyproject.toml`. An empty `--select` exits

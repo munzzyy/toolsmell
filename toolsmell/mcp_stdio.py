@@ -30,6 +30,7 @@ import time
 
 from . import __version__
 from .manifest import MAX_FILE_BYTES, parse_json
+from .report import _clean
 
 # A tools/list response describing a real server has no business being any
 # bigger than a manifest file would be -- a malicious or just-broken server
@@ -240,7 +241,7 @@ def _check_error(message: dict, step: str) -> None:
     err = message.get("error")
     if err is not None:
         detail = err.get("message") if isinstance(err, dict) else err
-        raise StdioError(f"server rejected {step}: {detail}")
+        raise StdioError(f"server rejected {step}: {_clean(str(detail))}")
 
 
 def _kill(proc: "subprocess.Popen") -> None:
@@ -266,7 +267,7 @@ def _stderr_tail(reader: _LineReader) -> str:
     message. Bounded in lines and characters on top of the reader's own byte
     cap, so a server that logs a megabyte before dying still produces a
     readable error."""
-    lines = [line.decode("utf-8", "replace").rstrip("\r")
+    lines = [_clean(line.decode("utf-8", "replace"))
              for line in reader.drain(STDERR_GRACE)]
     lines = [line for line in lines if line.strip()]
     if not lines:
@@ -334,7 +335,8 @@ def _discover_verdict(response: dict) -> bool:
     if code == UNSUPPORTED_PROTOCOL_VERSION:
         detail = error.get("message") if isinstance(error, dict) else error
         raise StdioError(
-            f"the server rejected protocol version {PROTOCOL_VERSION}: {detail}. "
+            f"the server rejected protocol version {PROTOCOL_VERSION}: "
+            f"{_clean(str(detail))}. "
             "It speaks the modern protocol on a version toolsmell does not, so "
             "the legacy handshake would not help either.")
     return False

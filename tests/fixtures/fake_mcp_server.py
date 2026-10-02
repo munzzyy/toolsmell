@@ -154,6 +154,16 @@ def run_unsupported_version() -> None:
     _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
 
 
+def run_escape() -> None:
+    """Puts terminal escapes and a newline in both places a failing server
+    gets to speak: the error message and its stderr."""
+    request = _read_request()
+    sys.stderr.write("log \x1b]52;c;aGVsbG8=\x07 done\n")
+    sys.stderr.flush()
+    _error(request["id"], UNSUPPORTED_PROTOCOL_VERSION,
+           "bad version\x1b]0;T\x07\x1b[31mRED\x1b[0m\nfake: line")
+
+
 def run_discover_silent() -> None:
     """A legacy server that neither answers nor rejects an unknown method.
     The probe has to time out and fall back rather than hang or give up."""
@@ -287,6 +297,7 @@ _MODES = {
     "ping-first": run_ping_first,
     "odd-ids": run_odd_ids,
     "unsupported-version": run_unsupported_version,
+    "escape": run_escape,
     "discover-silent": run_discover_silent,
     "startup-failure": run_startup_failure,
     "stderr-flood": run_stderr_flood,

@@ -256,6 +256,28 @@ class ServerStderr(unittest.TestCase):
         self.assertLess(len(message), mcp_stdio.STDERR_TAIL_CHARS + 500,
                         "a chatty server must not paste its whole log into the error")
 
+    def test_server_text_reaches_the_terminal_without_escapes(self):
+        # The error message and stderr are as untrusted as the tool list.
+        with self.assertRaises(StdioError) as ctx:
+            fetch_tools_via_stdio(_cmd("escape"))
+        message = str(ctx.exception)
+        self.assertNotIn("\x1b", message)
+        self.assertNotIn("\x07", message)
+        self.assertIn("RED", message)
+        lines = message.splitlines()
+        self.assertFalse([line for line in lines if line.startswith("fake: line")],
+                         "a newline from the server must not draw a line of its own")
+        self.assertEqual(lines[-2:], ["server stderr:", "  log ]52;c;aGVsbG8= done"])
+
+    def test_a_rejected_request_quotes_the_server_cleanly(self):
+        for error in ({"code": -32600, "message": "no\x1b[2J\nfake: ok"},
+                      "no\x1b[2J\nfake: ok"):
+            with self.subTest(error=error):
+                with self.assertRaises(StdioError) as ctx:
+                    mcp_stdio._check_error({"error": error}, "tools/list")
+                self.assertEqual(str(ctx.exception),
+                                 "server rejected tools/list: no[2J\\nfake: ok")
+
     def test_a_healthy_server_says_nothing_extra(self):
         # The stderr channel only shows up on a failure path; a good run must
         # not grow a "server stderr:" section out of nowhere.
@@ -326,6 +348,18 @@ class CLIStdio(unittest.TestCase):
                     code, out = self._run(["--stdio", _cmd(mode)])
                 self.assertEqual(code, 2)
                 self.assertNotIn("Traceback", err.getvalue())
+
+    def test_escapes_from_the_server_never_reach_stderr(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, out = self._run(["--stdio", _cmd("escape")])
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        text = err.getvalue()
+        self.assertTrue(text.startswith("toolsmell: the server rejected protocol version"))
+        for byte in ("\x1b", "\x07"):
+            self.assertNotIn(byte, text)
+        self.assertIn("done", text)
 
     def test_odd_response_ids_do_not_crash_the_cli(self):
         code, out = self._run(["--stdio", _cmd("odd-ids"), "--json",

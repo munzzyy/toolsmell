@@ -13,7 +13,9 @@ process genuinely runs. It's your responsibility to only point `--stdio` at
 a server you already trust to execute; toolsmell has no way to vet that for
 you. The server's `tools/list` response itself is still just data, handled
 by the same parser and the same threat model as a manifest file below - the
-subprocess only ever gets *started*, its output is never executed. A hard
+subprocess only ever gets *started*, its output is never executed. Its
+error messages and the stderr toolsmell quotes when it fails are untrusted
+the same way and get the same escaping before they reach your terminal. A hard
 timeout bounds the whole exchange and each read, and a size cap bounds the
 response, so a hung or unbounded-output server can't wedge or exhaust a run;
 the process is killed either way once it's over.
