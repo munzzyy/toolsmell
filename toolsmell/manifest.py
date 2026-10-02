@@ -50,17 +50,27 @@ def _deeper_than(data, limit: int) -> bool:
     return False
 
 
+# The same ceiling int() applies on current interpreters; older 3.9 builds
+# on some CI runners have none, so the check is ours.
+MAX_INT_DIGITS = 4300
+
+
+def _bounded_int(literal: str) -> int:
+    if len(literal.lstrip("-+")) > MAX_INT_DIGITS:
+        raise ValueError(f"integer literal has more than {MAX_INT_DIGITS} digits")
+    return int(literal)
+
+
 def parse_json(text: str):
     """json.loads for untrusted text: any parse failure is a ValueError whose
     message follows the source name ("tools.json is not valid JSON")."""
     try:
-        data = json.loads(text)
+        data = json.loads(text, parse_int=_bounded_int)
     except json.JSONDecodeError as e:
         raise ValueError(f"is not valid JSON: {e}") from None
     except RecursionError:
         raise ValueError(f"is nested more than {MAX_JSON_DEPTH} levels deep") from None
     except ValueError as e:
-        # Python refuses integer literals over 4300 digits by default.
         raise ValueError(f"could not be parsed: {str(e).split(';')[0]}") from None
     if _deeper_than(data, MAX_JSON_DEPTH):
         raise ValueError(f"is nested more than {MAX_JSON_DEPTH} levels deep")
