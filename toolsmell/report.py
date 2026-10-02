@@ -37,6 +37,8 @@ def _clean(s: str) -> str:
     The exit code and the score come from findings rather than from text, so
     this was only ever report spoofing and never a way past a gate, but the
     operator reading the terminal is the whole point of the report."""
+    if s.isascii() and s.isprintable():
+        return s
     out = []
     for ch in s:
         if ch == "\t":

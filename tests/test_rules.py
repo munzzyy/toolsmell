@@ -3,10 +3,24 @@ failure points straight at the rule, not at the whole pipeline."""
 
 from __future__ import annotations
 
+import contextlib
+import io
+import itertools
+import json
+import random
+import re
+import tempfile
+import time
 import unittest
+from pathlib import Path
+from unittest import mock
 
+from toolsmell import cli
+from toolsmell.lint import lint_tools
+from toolsmell.manifest import parse_tools
 from toolsmell.rules import description, examples, naming, schema
-from tests._helpers import mk_tool
+from toolsmell.rules._util import Tokens
+from tests._helpers import by_rule, lint, mk_tool
 
 
 def _ids(findings):
@@ -306,6 +320,230 @@ class NameCollision(unittest.TestCase):
             with self.subTest(pair=(a, b)):
                 full = naming._levenshtein(a, b)
                 self.assertEqual((full <= 2), (naming._levenshtein(a, b, 2) <= 2))
+
+
+# TS-009 before the index, pair by pair. _within stands in for the DP table,
+# which test_within_agrees_with_the_full_table holds it to.
+_REF_SEP = re.compile(r"[_\-\s]+")
+
+
+def _ref_levenshtein(a, b):
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb))
+        prev = cur
+    return prev[-1]
+
+
+def _ref_collides(na, nb):
+    if na == nb:
+        return True
+    shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
+    if len(shorter) >= 4 and longer.startswith(shorter) and len(longer) - len(shorter) <= 4:
+        return True
+    return (min(len(na), len(nb)) >= 6 and abs(len(na) - len(nb)) <= 2
+            and naming._within(na, nb, 2))
+
+
+def _name_corpus(seed=11, size=2500):
+    """Real-looking tool names, plus the near misses TS-009 is about:
+    prefixes, case and separator changes, and one or two random edits."""
+    rng = random.Random(seed)
+    verbs = ["get", "list", "create", "delete", "update", "search", "sync",
+             "fetch", "bulk_import", "reconcile_all"]
+    nouns = ["user", "order", "invoice", "record", "weather", "repo", "issue",
+             "payment", "session", "report", "customer", "ticket",
+             "billing_account", "webhook_endpoint", "customer_subscription",
+             "pull_request_review_comment"]
+    base = [f"{v}_{n}" for v in verbs for n in nouns]
+    names = set(base)
+    alphabet = "abcdefghijklmnopqrstuvwxyz0123456789_-"
+
+    def edit(name):
+        i = rng.randrange(len(name) + 1)
+        op = rng.choice("sid")
+        if op == "s" and i < len(name):
+            return name[:i] + rng.choice(alphabet) + name[i + 1:]
+        if op == "d" and i < len(name):
+            return name[:i] + name[i + 1:]
+        return name[:i] + rng.choice(alphabet) + name[i:]
+
+    while len(names) < size:
+        name = rng.choice(base)
+        kind = rng.randrange(7)
+        if kind == 0:
+            name += rng.choice(["s", "_v2", "_all", "es", "_by_id"])
+        elif kind == 1:
+            name = name.upper() if rng.random() < 0.5 else name.title()
+        elif kind == 2:
+            name = name.replace("_", rng.choice(["-", "", " ", "__"]))
+        elif kind == 3:
+            name = edit(name)
+        elif kind == 4:
+            name = edit(edit(name))
+        elif kind == 5:
+            name = name[:rng.randint(3, len(name))]
+        else:
+            name = "".join(rng.choice(alphabet) for _ in range(rng.randint(4, 40)))
+        if name.strip():
+            names.add(name)
+    return sorted(names)
+
+
+class CollisionIndexParity(unittest.TestCase):
+    """The index replaced a pairwise loop that took minutes on a few
+    thousand tools. It must not change a single verdict."""
+
+    def test_index_finds_exactly_the_pairwise_collisions(self):
+        names = _name_corpus()
+        tools = parse_tools({"tools": [{"name": n} for n in names]})
+        norms = [_REF_SEP.sub("", t.name.lower()) for t in tools]
+        # No branch of the rule matches lengths more than four apart.
+        order = sorted(range(len(tools)), key=lambda i: len(norms[i]))
+        expected = {}
+        for x, a in enumerate(order):
+            for b in order[x + 1:]:
+                if len(norms[b]) - len(norms[a]) > 4:
+                    break
+                if tools[a].name != tools[b].name and _ref_collides(norms[a], norms[b]):
+                    expected.setdefault(a, []).append(b)
+                    expected.setdefault(b, []).append(a)
+        self.assertGreater(len(expected), 1000, "the corpus should collide a lot")
+
+        index = naming._collision_index(tools)
+        self.assertEqual(set(index), set(expected))
+        for i, others in expected.items():
+            listed, count = index[i]
+            self.assertEqual(count, len(others), names[i])
+            self.assertEqual([t.index for t in listed], sorted(others)[:naming.MAX_FINDINGS])
+
+    def test_within_agrees_with_the_full_table(self):
+        strings = ["".join(p) for n in range(6) for p in itertools.product("ab", repeat=n)]
+        strings += ["abcabc", "bcabca", "aabbcc", "abcdef", "abdcef", "xabcdefy"]
+        for a in strings:
+            for b in strings:
+                distance = _ref_levenshtein(a, b)
+                for k in range(4):
+                    self.assertEqual(naming._within(a, b, k), distance <= k, (a, b, k))
+        rng = random.Random(3)
+        for _ in range(3000):
+            a = "".join(rng.choice("abc") for _ in range(rng.randint(0, 14)))
+            b = "".join(rng.choice("abc") for _ in range(rng.randint(0, 14)))
+            distance = _ref_levenshtein(a, b)
+            for k in range(4):
+                self.assertEqual(naming._within(a, b, k), distance <= k, (a, b, k))
+
+    def test_bounded_levenshtein_still_agrees_with_within(self):
+        names = _name_corpus(size=400)
+        norms = [naming._normalized(n) for n in names]
+        for a, b in itertools.combinations(norms, 2):
+            if abs(len(a) - len(b)) <= 2:
+                self.assertEqual(naming._within(a, b, 2),
+                                 naming._levenshtein(a, b, 2) <= 2, (a, b))
+
+    def test_two_long_names_one_edit_apart_are_fast(self):
+        a = mk_tool("a" * 20000 + "b", description="d")
+        b = mk_tool("a" * 20000 + "c", description="d", index=1)
+        started = time.monotonic()
+        self.assertEqual(_ids(naming.check(a, [a, b])), ["TS-009"])
+        self.assertLess(time.monotonic() - started, 10.0)
+
+
+class CollisionCaps(unittest.TestCase):
+    def test_findings_stop_at_the_score_cap_and_count_the_rest(self):
+        result = lint(*[{"name": n} for n in
+                        ["get_user", "get_users", "get-user", "Get_User", "get_userx", "getuser"]])
+        first = result.tools[0]
+        ts009 = [f for f in first.findings if f.rule_id == "TS-009"]
+        self.assertEqual(len(ts009), naming.MAX_FINDINGS)
+        self.assertIn("and of 1 more tool(s) not listed", ts009[-1].detail)
+        self.assertNotIn("more tool(s)", ts009[0].detail)
+
+    def test_budget_stops_edit_matching_and_says_so(self):
+        names = [{"name": f"tool_{c}bcdef"} for c in "pqrstuvw"]
+        with mock.patch.object(naming, "EDIT_BUDGET", 3):
+            result = lint(*names)
+        self.assertEqual(len(result.notes), 1)
+        self.assertIn("stopped looking", result.notes[0])
+        with mock.patch.object(naming, "EDIT_BUDGET", 3):
+            quiet = lint(*names, enabled=frozenset({"TS-001"}))
+        self.assertEqual(quiet.notes, [])
+
+    def test_cli_prints_notes_on_stderr_only(self):
+        tmp = Path(tempfile.mkdtemp()) / "tools.json"
+        tmp.write_text(json.dumps({"tools": [{"name": f"tool_{c}bcdef"} for c in "pqrstuvw"]}),
+                       encoding="utf-8")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(naming, "EDIT_BUDGET", 3), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            cli.main([str(tmp), "--json", "--max-score", "1000"])
+        json.loads(out.getvalue())
+        self.assertIn("stopped looking", err.getvalue())
+
+
+def _ref_param_mentioned(desc, name):
+    return schema._param_mentioned(desc, name)
+
+
+class MentionParity(unittest.TestCase):
+    """TS-005 answers from a token set now instead of running regexes over
+    the description once per parameter. Same verdicts either way."""
+
+    DESCRIPTIONS = [
+        "Fetches the item with the given item_id and returns its record, or an error.",
+        "Looks up a user.name in the x-api-key header; returns JSON. Raises on a bad repo.",
+        "Uses the repository config (configuration) and the auth-token; errors if unknown.",
+        "The \u212aelvin scale and a lo\u017fe ID in \u0130stanbul, with an id.",
+        "Returns the idle superuser; v2.1 of get-items. Sort order is asc.",
+        "",
+    ]
+    NAMES = ["item_id", "item", "id", "user.name", "user", "name", "x-api-key",
+             "api_key", "repo", "config", "auth_token", "auth-token", "kelvin",
+             "lose", "istanbul", "Istanbul", "idle_user", "super", "user_id",
+             "v2.1", "get-items", "getItems", "sortOrder", "asc", "ID", "Id",
+             "repoUrl", "configuration", "s", "x", "_private", "trailing_",
+             "a.b.c", "caf\u00e9", "\u212aelvin", "lo\u017fe", "-", "123"]
+
+    def test_fast_path_matches_the_regexes(self):
+        for desc in self.DESCRIPTIONS:
+            tokens = Tokens(desc)
+            for name in self.NAMES:
+                with self.subTest(desc=desc[:30], name=name):
+                    self.assertEqual(
+                        schema._param_mentioned_fast(tokens, name, [], []),
+                        _ref_param_mentioned(desc, name))
+
+    def test_fast_path_matches_on_random_names(self):
+        rng = random.Random(5)
+        alphabet = "abcdeIKS_-. \u0130\u0131\u017f\u212a"
+        for _ in range(120):
+            desc = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 60)))
+            tokens = Tokens(desc)
+            for _ in range(10):
+                name = "".join(rng.choice(alphabet) for _ in range(rng.randint(1, 8)))
+                self.assertEqual(schema._param_mentioned_fast(tokens, name, [], []),
+                                 _ref_param_mentioned(desc, name), (desc, name))
+
+    def test_many_params_against_a_long_description_are_fast(self):
+        t = mk_tool("w", description="word " * 100000, schema={
+            "type": "object", "properties": {f"p{i}": {} for i in range(1000)}})
+        started = time.monotonic()
+        self.assertEqual(len(schema.check(t, [t])), 1000 + 1000 + 1)
+        self.assertLess(time.monotonic() - started, 15.0)
+
+    def test_slow_path_budget_skips_and_says_so(self):
+        desc = "Pass item_id and user_id; returns the record or an error."
+        tool = {"name": "t", "description": desc, "inputSchema": {
+            "type": "object", "properties": {"item_id": {}, "user_id": {}, "order_id": {}},
+            "required": []}}
+        with mock.patch.object(schema, "SLOW_PATH_CHARS", 2 * len(desc)):
+            result = lint(tool)
+        self.assertEqual(len(result.notes), 1)
+        self.assertIn("TS-005 did not check 1 parameter", result.notes[0])
+        full = lint(tool)
+        self.assertEqual(full.notes, [])
 
 
 class MissingExample(unittest.TestCase):

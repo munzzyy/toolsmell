@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from .finding import Severity
 from .manifest import load_manifest, parse_tools
 from .rules import run_all
+from .rules._util import ToolList
 from .score import overall_score, tool_score
 
 
@@ -22,6 +23,8 @@ class LintResult:
     source: str
     tools: list = field(default_factory=list)  # list[ToolReport]
     score: int = 0
+    # Printed on stderr, never part of the score or the JSON.
+    notes: list = field(default_factory=list)
 
     @property
     def findings(self) -> list:
@@ -41,12 +44,15 @@ def lint_tools(tools, source: str = "<data>", enabled=None) -> LintResult:
     """Lint a parsed tool list. `enabled` is the set of rule ids allowed to
     report (see toolsmell.config), or None to run every rule."""
     result = LintResult(source=source)
+    tools = ToolList(tools)
     for tool in tools:
         findings = run_all(tool, tools, enabled=enabled)
         findings.sort(key=lambda f: f.sort_key())
         result.tools.append(ToolReport(name=tool.name, findings=findings,
                                         score=tool_score(findings)))
     result.score = overall_score([t.score for t in result.tools])
+    result.notes = [message for rule_id, message in tools.notes
+                    if enabled is None or rule_id in enabled]
     return result
 
 

@@ -16,9 +16,11 @@ point.
 
 from __future__ import annotations
 
+import bisect
 import re
 
 from .. import catalog
+from ._util import manifest_index
 
 # MCP 2026-07-28: a tool name is 1 to 128 characters of [A-Za-z0-9_.-].
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.\-]+$")
@@ -170,15 +172,35 @@ def _check_icons(tool) -> list:
     return findings
 
 
+# Listing every index made the report quadratic in the number of copies.
+MAX_LISTED_INDICES = 10
+
+
+def _indices_by_name(all_tools) -> dict:
+    out = {}
+    for t in all_tools:
+        out.setdefault(t.name, []).append(t.index)
+    for indices in out.values():
+        indices.sort()
+    return out
+
+
 def _check_duplicate_name(tool, all_tools) -> list:
     """MCP identifies a tool by its name, so two tools sharing one are not
     two tools to a client that keeps a name-keyed registry -- one of them
     is simply gone, and which one survives depends on iteration order the
     server does not control."""
-    dupes = [t.index for t in all_tools if t.index != tool.index and t.name == tool.name]
-    if not dupes:
+    same = manifest_index(all_tools, _indices_by_name).get(tool.name, [])
+    at = bisect.bisect_left(same, tool.index)
+    own = bisect.bisect_right(same, tool.index) - at
+    total = len(same) - own + 1
+    if total < 2:
         return []
-    indices = ", ".join(str(i) for i in sorted([tool.index] + dupes))
+    head = (same[:min(at, MAX_LISTED_INDICES)] + [tool.index]
+            + same[at + own:at + own + MAX_LISTED_INDICES])
+    indices = ", ".join(str(i) for i in head[:MAX_LISTED_INDICES])
+    if total > MAX_LISTED_INDICES:
+        indices += f" and {total - MAX_LISTED_INDICES} more"
     return [catalog.build(
         "TS-018", tool=tool.name,
         detail=f"the name '{tool.name}' is used by more than one tool "

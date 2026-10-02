@@ -86,6 +86,12 @@ carries no information (`idle` would document `id`), so short names keep the
 strict whole-word rule. It is a prefix test rather than a stemmer, so
 `currencies` does not document `currency`.
 
+A name with punctuation in it (`item_id`, `x-api-key`) is the one case that
+still takes a regex pass over the description. Those passes stop after 50
+million characters per manifest, which only a manifest built to be slow
+gets near. Parameters left unchecked then get no finding, and stderr says
+how many were skipped.
+
 ```json
 {
   "description": "Converts an amount between currencies.",
@@ -148,6 +154,12 @@ vs. "Get-User"), a short prefix relationship ("search_items" vs.
 "search_items_v2"), or a small edit distance between similar-length names
 ("get_invoice" vs. "get_invoicee"). An agent can easily call the wrong one.
 An exact duplicate is reported as [TS-018](#ts-018) instead.
+
+A tool gets at most four TS-009 findings, which is already the 100-point
+cap; the fourth says how many more names collide with it. The edit-distance
+check stops after two million name comparisons per manifest (a pair of very
+long names counts as more than one), and stderr says so when it does. Case,
+separator and prefix collisions are always checked in full.
 
 ```json
 {"tools": [{"name": "get_user"}, {"name": "get_users"}]}
@@ -300,5 +312,8 @@ iteration order the server does not control.
 ```json
 {"tools": [{"name": "search"}, {"name": "search"}]}
 ```
+
+The finding lists the indices of the tools sharing the name, up to ten,
+and counts the rest.
 
 Fix: rename one of the two tools so each name in the manifest is used once.

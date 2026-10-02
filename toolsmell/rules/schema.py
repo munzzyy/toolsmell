@@ -6,7 +6,8 @@ from __future__ import annotations
 import re
 
 from .. import catalog
-from ._util import mentions, split_name_words
+from ._util import (Tokens, is_one_token, mentions, note, spend,
+                    split_name_words, token_pieces)
 
 _ENUM_PHRASE = re.compile(
     r"\b(one of|either|allowed values?|options? (?:are|include)|must be)\b",
@@ -52,6 +53,35 @@ def _param_mentioned(desc: str, name: str) -> bool:
     return all(_mentioned(desc, w) for w in words)
 
 
+# Characters the regex fallback may read per manifest before TS-005 gives up.
+SLOW_PATH_CHARS = 50_000_000
+
+
+def _mentioned_fast(tokens: Tokens, term: str, all_tools, skipped: list) -> bool:
+    """_mentioned(tokens.text, term), by lookup where that gives the same answer."""
+    if is_one_token(term):
+        return tokens.has(term) or (len(term) >= MIN_STEM_CHARS
+                                    and tokens.has_prefix(term))
+    pieces = token_pieces(term)
+    # Each run must be a whole token; the stem rule lets the last one run on.
+    if pieces and not (all(p in tokens.set for p in pieces[:-1])
+                       and tokens.has_prefix(pieces[-1])):
+        return False
+    if not spend(all_tools, "TS-005", SLOW_PATH_CHARS, 2 * len(tokens.text)):
+        skipped.append(term)
+        return True
+    return _mentioned(tokens.text, term)
+
+
+def _param_mentioned_fast(tokens: Tokens, name: str, all_tools, skipped: list) -> bool:
+    if _mentioned_fast(tokens, name, all_tools, skipped):
+        return True
+    words = split_name_words(name)
+    if not words:
+        return False
+    return all(_mentioned_fast(tokens, w, all_tools, skipped) for w in words)
+
+
 def _looks_enum_worthy(desc: str) -> bool:
     if not desc:
         return False
@@ -69,13 +99,21 @@ def check(tool, all_tools) -> list:
     # Undocumented params pile on when there is no description at all --
     # TS-001 already covers that case, so only check here once there is
     # some text a parameter could plausibly be mentioned in.
-    if desc:
+    if desc and params:
+        tokens = Tokens(desc)
+        skipped = []
         for p in params:
-            if not _param_mentioned(desc, p.name):
+            if not _param_mentioned_fast(tokens, p.name, all_tools, skipped):
                 findings.append(catalog.build(
                     "TS-005", tool=tool.name, param=p.name,
                     detail=f"'{tool.name}' parameter '{p.name}' is never "
                            "mentioned in the description."))
+        if skipped:
+            note(all_tools, "TS-005",
+                 f"TS-005 did not check {len(skipped)} parameter name(s) of "
+                 f"'{tool.name}' against its description: the manifest used "
+                 f"up the {SLOW_PATH_CHARS:,}-character budget for "
+                 "names with punctuation in them.")
 
     for p in params:
         if not p.description.strip():

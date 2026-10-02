@@ -88,12 +88,18 @@ def _print_gate_trip(result, args) -> None:
           f"{args.max_tool_score}: {names}", file=sys.stderr)
 
 
+def _print_notes(result) -> None:
+    for message in result.notes:
+        print(f"toolsmell: {_clean(result.source)}: {_clean(message)}", file=sys.stderr)
+
+
 def _report(result, args, color: bool) -> bool:
     """Print one lint result and say whether it should fail the run."""
     if args.json:
         print(render_json(result))
     else:
         print(render_human(result, color=color))
+    _print_notes(result)
     _print_gate_trip(result, args)
     return _should_fail(result, args)
 
@@ -196,6 +202,7 @@ def main(argv=None) -> int:
     if args.json and len(results) > 1:
         print(render_json_multi(results))
         for result in results:
+            _print_notes(result)
             _print_gate_trip(result, args)
     else:
         for result in results:

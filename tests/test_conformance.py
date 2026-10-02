@@ -227,6 +227,18 @@ class DuplicateName(unittest.TestCase):
         a, b = mk_tool("Search", index=0), mk_tool("search", index=1)
         self.assertNotIn("TS-018", _ids(conformance.check(a, [a, b])))
 
+    def test_a_long_index_list_is_cut_short_and_counted(self):
+        tools = [mk_tool("search", index=i) for i in range(12)]
+        detail = next(f.detail for f in conformance.check(tools[11], tools)
+                      if f.rule_id == "TS-018")
+        self.assertIn("(indices 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 and 2 more)", detail)
+
+    def test_ten_indices_are_listed_in_full(self):
+        tools = [mk_tool("search", index=i) for i in range(10)]
+        detail = next(f.detail for f in conformance.check(tools[3], tools)
+                      if f.rule_id == "TS-018")
+        self.assertIn("(indices 0, 1, 2, 3, 4, 5, 6, 7, 8, 9)", detail)
+
 
 class NoFalsePositivesOnOrdinaryTools(unittest.TestCase):
     def test_a_plain_tool_trips_none_of_these_rules(self):
