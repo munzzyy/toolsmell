@@ -51,7 +51,7 @@ def lint_tools(tools, source: str = "<data>", enabled=None) -> LintResult:
         result.tools.append(ToolReport(name=tool.name, findings=findings,
                                         score=tool_score(findings)))
     result.score = overall_score([t.score for t in result.tools])
-    result.notes = [message for rule_id, message in tools.notes
+    result.notes = [message for (rule_id, _), message in tools.notes.items()
                     if enabled is None or rule_id in enabled]
     return result
 

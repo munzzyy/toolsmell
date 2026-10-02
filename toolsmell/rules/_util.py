@@ -46,7 +46,7 @@ class ToolList(list):
         super().__init__(tools)
         self.indexes = {}
         self.budgets = {}
-        self.notes = []
+        self.notes = {}
 
 
 def manifest_index(all_tools, build):
@@ -75,8 +75,8 @@ def spend(all_tools, key: str, start: int, amount: int) -> bool:
 
 def note(all_tools, rule_id: str, message: str) -> None:
     notes = getattr(all_tools, "notes", None)
-    if notes is not None and (rule_id, message) not in notes:
-        notes.append((rule_id, message))
+    if notes is not None:
+        notes[(rule_id, message)] = message
 
 
 # With IGNORECASE this class also takes the four letters below, as mentions() does.

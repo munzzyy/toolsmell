@@ -19,7 +19,7 @@ from toolsmell import cli
 from toolsmell.lint import lint_tools
 from toolsmell.manifest import parse_tools
 from toolsmell.rules import description, examples, naming, schema
-from toolsmell.rules._util import Tokens
+from toolsmell.rules._util import Tokens, ToolList, note
 from tests._helpers import by_rule, lint, mk_tool
 
 
@@ -481,6 +481,17 @@ class CollisionCaps(unittest.TestCase):
             cli.main([str(tmp), "--json", "--max-score", "1000"])
         json.loads(out.getvalue())
         self.assertIn("stopped looking", err.getvalue())
+
+
+class Notes(unittest.TestCase):
+    def test_many_distinct_notes_stay_cheap(self):
+        tools = ToolList()
+        started = time.monotonic()
+        for i in range(30000):
+            note(tools, "TS-005", f"note {i}")
+            note(tools, "TS-005", f"note {i}")
+        self.assertLess(time.monotonic() - started, 5.0)
+        self.assertEqual(len(tools.notes), 30000)
 
 
 def _ref_param_mentioned(desc, name):
