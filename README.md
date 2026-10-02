@@ -128,7 +128,7 @@ subprocess, so only point it at a server you already trust to execute -- see
 above `N`. That's the whole CI story:
 
 ```yaml
-- run: pip install git+https://github.com/munzzyy/toolsmell@v0.1.0
+- run: pip install git+https://github.com/munzzyy/toolsmell@v0.2.0
 - run: toolsmell ./tools.json --max-score 30
 ```
 
@@ -234,7 +234,7 @@ You can run `toolsmell` as a [pre-commit](https://pre-commit.com/) hook. Add thi
 ```yaml
 repos:
   - repo: https://github.com/munzzyy/toolsmell
-    rev: v0.1.0  # replace with the latest version
+    rev: v0.2.0  # replace with the latest version
     hooks:
       - id: toolsmell
         # You can override the files regex to match your manifest
@@ -321,10 +321,6 @@ MUST and a conforming client drops the tool rather than warning about it:
 What is left needs a release, a package index or a decision before it
 needs more code.
 
-- A v0.2.0 tag. Everything under Unreleased in [CHANGELOG.md](CHANGELOG.md)
-  is on `main` but in no tag yet. The `@v0.1.0` pin in the CI snippet and
-  `rev: v0.1.0` for pre-commit get none of it, `--stdio` included. Pin a
-  commit from `main` if you need it sooner.
 - A PyPI release so that `pipx install toolsmell` works. Until then install
   from the repo as [Install](#install) shows.
 - Linting a hosted server directly. Today a remote server goes through a

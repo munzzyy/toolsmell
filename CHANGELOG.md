@@ -5,6 +5,8 @@ Notable changes to toolsmell. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
 ### Changed
 
 These can change a result you already rely on.
@@ -72,5 +74,6 @@ First tagged release. Lints a `tools/list` JSON file against twelve rules
 (TS-001 to TS-012) and prints a 0-100 smell score that `--max-score` gates
 in CI. Ships a pre-commit hook and `--json` output.
 
-[Unreleased]: https://github.com/munzzyy/toolsmell/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/munzzyy/toolsmell/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/munzzyy/toolsmell/releases/tag/v0.2.0
 [0.1.0]: https://github.com/munzzyy/toolsmell/releases/tag/v0.1.0
