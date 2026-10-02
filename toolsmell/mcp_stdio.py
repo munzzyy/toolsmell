@@ -229,9 +229,10 @@ def _recv_response(reader: _LineReader, deadline: float, expected_id,
             raise StdioError(f"server response is not valid UTF-8: {e}")
         except ValueError as e:
             raise StdioError(f"server response {e}")
+        # Compared by ==, never hashed: a hostile id can be a list or object.
         if (isinstance(message, dict) and "method" not in message
                 and ("result" in message or "error" in message)
-                and message.get("id") in expected):
+                and any(message.get("id") == want for want in expected)):
             return message
 
 
@@ -475,9 +476,12 @@ def fetch_tools_via_stdio(command: str, timeout: float = None) -> dict:
         tools = _list_tools(proc, reader, deadline, request_id=3, modern=modern,
                             read_timeout=read_timeout)
     except StdioError as e:
+        message = str(e)
+        if isinstance(e, _ReadTimeout) and time.monotonic() >= deadline:
+            message = f"server did not respond within the {budget:g}s timeout"
         # Re-raise as the same class: StdioLimitError has to stay a limit
         # error after the stderr tail is bolted on.
-        raise type(e)(_with_server_output(str(e), err_reader, proc)) from None
+        raise type(e)(_with_server_output(message, err_reader, proc)) from None
     finally:
         _kill(proc)
 

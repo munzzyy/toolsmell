@@ -30,6 +30,11 @@ def _cmd(mode: str) -> str:
     return f"{shlex.quote(sys.executable)} {shlex.quote(str(FIXTURE))} {mode}"
 
 
+def _short_grace():
+    # A fixture that never exits makes the full grace period dead time.
+    return mock.patch.object(mcp_stdio, "STDERR_GRACE", 0.05)
+
+
 class _FastTimeouts:
     """Swap the module's wall-clock constants for small ones for the
     duration of a test, so a deliberately hung fixture doesn't make the
@@ -37,12 +42,15 @@ class _FastTimeouts:
     already uses for the same reason."""
 
     def __enter__(self):
+        self._grace = _short_grace()
+        self._grace.start()
         self._process, self._read = mcp_stdio.PROCESS_TIMEOUT, mcp_stdio.READ_TIMEOUT
         mcp_stdio.PROCESS_TIMEOUT, mcp_stdio.READ_TIMEOUT = 0.5, 0.5
         return self
 
     def __exit__(self, *exc):
         mcp_stdio.PROCESS_TIMEOUT, mcp_stdio.READ_TIMEOUT = self._process, self._read
+        self._grace.stop()
 
 
 class FetchToolsViaStdio(unittest.TestCase):
@@ -82,7 +90,8 @@ class FetchToolsViaStdio(unittest.TestCase):
             # StdioLimitError specifically: the version probe swallows
             # protocol errors to fall back to the legacy handshake, and it
             # must never swallow a size cap the same way.
-            with self.assertRaises(mcp_stdio.StdioLimitError) as ctx:
+            with _short_grace(), \
+                    self.assertRaises(mcp_stdio.StdioLimitError) as ctx:
                 fetch_tools_via_stdio(_cmd("oversized"))
             # The cap counts the whole session, so paging does not help.
             self.assertIn("nextCursor", str(ctx.exception))
@@ -170,7 +179,7 @@ class ProtocolNegotiation(unittest.TestCase):
         # The fixture answers -32022 and then offers a working legacy
         # handshake. A client that falls back gets tools; toolsmell must
         # stop and say the version was rejected.
-        with self.assertRaises(StdioError) as ctx:
+        with _short_grace(), self.assertRaises(StdioError) as ctx:
             fetch_tools_via_stdio(_cmd("unsupported-version"))
         message = str(ctx.exception)
         self.assertIn("rejected protocol version", message)
@@ -189,6 +198,10 @@ class ProtocolNegotiation(unittest.TestCase):
         result = fetch_tools_via_stdio(_cmd("ping-first"))
         self.assertEqual(result["tools"][0]["name"], "get_weather")
 
+    def test_responses_with_list_or_object_ids_are_skipped(self):
+        result = fetch_tools_via_stdio(_cmd("odd-ids"))
+        self.assertEqual(result["tools"][0]["name"], "get_weather")
+
     def test_a_modern_server_slower_than_the_probe_is_still_reached(self):
         # The late server/discover answer has to win over the fallback.
         with mock.patch.object(mcp_stdio, "DISCOVER_TIMEOUT", 0.3):
@@ -197,9 +210,15 @@ class ProtocolNegotiation(unittest.TestCase):
 
     def test_timeout_replaces_the_default_budget(self):
         started = time.monotonic()
-        with _FastDiscover(0.2), self.assertRaises(StdioError):
+        with _FastDiscover(0.2), _short_grace(), self.assertRaises(StdioError):
             fetch_tools_via_stdio(_cmd("hang"), timeout=0.4)
         self.assertLess(time.monotonic() - started, 10.0)
+
+    def test_running_out_of_budget_names_the_budget(self):
+        with _FastDiscover(5.0), _short_grace(), \
+                self.assertRaises(StdioError) as ctx:
+            fetch_tools_via_stdio(_cmd("hang"), timeout=0.4)
+        self.assertIn("within the 0.4s timeout", str(ctx.exception))
 
     def test_timeout_lifts_the_per_read_ceiling(self):
         # The default ceiling on one read would give up on this server.
@@ -307,6 +326,12 @@ class CLIStdio(unittest.TestCase):
                     code, out = self._run(["--stdio", _cmd(mode)])
                 self.assertEqual(code, 2)
                 self.assertNotIn("Traceback", err.getvalue())
+
+    def test_odd_response_ids_do_not_crash_the_cli(self):
+        code, out = self._run(["--stdio", _cmd("odd-ids"), "--json",
+                               "--max-score", "1000"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["tools"][0]["name"], "get_weather")
 
     def test_timeout_flag_reaches_the_server(self):
         code, out = self._run(["--stdio", _cmd("modern"), "--timeout", "30", "--no-color"])

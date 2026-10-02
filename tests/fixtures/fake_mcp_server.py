@@ -123,6 +123,25 @@ def run_ping_first() -> None:
     run_ok()
 
 
+_ODD_ID_RESPONSES = (
+    {"jsonrpc": "2.0", "id": [1], "result": {}},
+    {"jsonrpc": "2.0", "id": {"a": 1}, "result": {}},
+)
+
+
+def run_odd_ids() -> None:
+    """Sends responses whose ids are a list and an object, ahead of each
+    real answer. Neither can match a request toolsmell sent, so the client
+    has to skip them rather than choke on comparing them."""
+    for message in _ODD_ID_RESPONSES:
+        _write(message)
+    _legacy_open()
+    list_request = _read_request()
+    for message in _ODD_ID_RESPONSES:
+        _write(message)
+    _write({"jsonrpc": "2.0", "id": list_request["id"], "result": TOOLS_RESULT})
+
+
 def run_unsupported_version() -> None:
     """A modern server on a version we can't talk. The client must stop here
     -- so this fixture goes on to offer a perfectly good legacy handshake,
@@ -266,6 +285,7 @@ _MODES = {
     "modern": run_modern,
     "slow-modern": run_slow_modern,
     "ping-first": run_ping_first,
+    "odd-ids": run_odd_ids,
     "unsupported-version": run_unsupported_version,
     "discover-silent": run_discover_silent,
     "startup-failure": run_startup_failure,
