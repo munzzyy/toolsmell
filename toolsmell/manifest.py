@@ -18,9 +18,45 @@ from pathlib import Path
 # arbitrarily large file into memory.
 MAX_FILE_BYTES = 5_000_000
 
+# Deep enough for any real schema, shallow enough for 3.9 to parse and repr().
+MAX_JSON_DEPTH = 512
+
 
 class ManifestError(Exception):
     """Raised when the input cannot be read as a tools manifest."""
+
+
+def _deeper_than(data, limit: int) -> bool:
+    stack = [(data, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if isinstance(node, dict):
+            children = node.values()
+        elif isinstance(node, list):
+            children = node
+        else:
+            continue
+        if depth > limit:
+            return True
+        stack.extend((child, depth + 1) for child in children)
+    return False
+
+
+def parse_json(text: str):
+    """json.loads for untrusted text: any parse failure is a ValueError whose
+    message follows the source name ("tools.json is not valid JSON")."""
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"is not valid JSON: {e}") from None
+    except RecursionError:
+        raise ValueError(f"is nested more than {MAX_JSON_DEPTH} levels deep") from None
+    except ValueError as e:
+        # Python refuses integer literals over 4300 digits by default.
+        raise ValueError(f"could not be parsed: {str(e).split(';')[0]}") from None
+    if _deeper_than(data, MAX_JSON_DEPTH):
+        raise ValueError(f"is nested more than {MAX_JSON_DEPTH} levels deep")
+    return data
 
 
 def _lookup_ref(ref: str, root: dict):
@@ -73,7 +109,7 @@ def _collect_schema(schema: dict):
         props.update(top_props)
     top_required = schema.get("required")
     if isinstance(top_required, list):
-        required.update(top_required)
+        required.update(r for r in top_required if isinstance(r, str))
         has_required_list = True
     for key in ("allOf", "anyOf", "oneOf"):
         branches = schema.get(key)
@@ -88,7 +124,7 @@ def _collect_schema(schema: dict):
                     props.setdefault(name, sub)
             b_required = branch.get("required")
             if isinstance(b_required, list):
-                required.update(b_required)
+                required.update(r for r in b_required if isinstance(r, str))
                 has_required_list = True
     return props, required, has_required_list
 
@@ -222,9 +258,9 @@ def load_manifest(path) -> list:
     except UnicodeDecodeError as e:
         raise ManifestError(f"{p} is not valid UTF-8: {e}")
     try:
-        data = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ManifestError(f"{p} is not valid JSON: {e}")
+        data = parse_json(text)
+    except ValueError as e:
+        raise ManifestError(f"{p} {e}")
     return parse_tools(data, source=str(p))
 
 

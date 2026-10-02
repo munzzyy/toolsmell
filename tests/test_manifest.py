@@ -3,12 +3,16 @@ malformed-input paths that must raise ManifestError instead of crashing."""
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from toolsmell.manifest import ManifestError, load_manifest, parse_tools
+from toolsmell import cli
+from toolsmell.lint import lint_path
+from toolsmell.manifest import MAX_JSON_DEPTH, ManifestError, load_manifest, parse_tools
 
 
 class ParseTools(unittest.TestCase):
@@ -178,6 +182,81 @@ class FileEncodings(unittest.TestCase):
         with self.assertRaises(ManifestError) as ctx:
             load_manifest(p)
         self.assertIn("UTF-32LE", str(ctx.exception))
+
+
+def _nest(depth: int) -> str:
+    return "[" * depth + "]" * depth
+
+
+class HostileJson(unittest.TestCase):
+    """A manifest built to crash the parser has to come back as a usage
+    error. A traceback exits 1, the same code as a tripped smell gate."""
+
+    def _write(self, text: str) -> Path:
+        tmp = Path(tempfile.mkdtemp()) / "tools.json"
+        tmp.write_text(text, encoding="utf-8")
+        return tmp
+
+    def _cli(self, path):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main([str(path)])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_nesting_past_the_parser_stack_is_a_manifest_error(self):
+        p = self._write('{"tools": ' + _nest(200_000) + "}")
+        with self.assertRaises(ManifestError) as ctx:
+            load_manifest(p)
+        self.assertIn("levels deep", str(ctx.exception))
+
+    def test_nesting_the_parser_accepts_is_still_capped(self):
+        # 3.12+ parses this, then overflows the stack in the TS-014 repr().
+        tool = ('{"name": "t", "inputSchema": {"properties": {"a": '
+                '{"type": "string", "x-mcp-header": ' + _nest(MAX_JSON_DEPTH) + "}}}}")
+        p = self._write('{"tools": [' + tool + "]}")
+        with self.assertRaises(ManifestError):
+            load_manifest(p)
+
+    def test_nesting_under_the_cap_loads(self):
+        p = self._write('{"tools": [{"name": "t", "x": ' + _nest(MAX_JSON_DEPTH - 4) + "}]}")
+        self.assertEqual(load_manifest(p)[0].name, "t")
+
+    def test_integer_over_the_digit_limit_is_a_manifest_error(self):
+        p = self._write('{"tools": [{"name": "t", "inputSchema": {"properties": '
+                        '{"a": {"maxLength": ' + "9" * 5000 + "}}}}]}")
+        with self.assertRaises(ManifestError) as ctx:
+            load_manifest(p)
+        self.assertIn("4300", str(ctx.exception))
+
+    def test_cli_exits_two_with_one_line_and_no_traceback(self):
+        for text in ('{"tools": ' + _nest(200_000) + "}",
+                     '{"tools": [{"name": "t", "x": ' + "9" * 5000 + "}]}"):
+            with self.subTest(text=text[:20]):
+                code, out, err = self._cli(self._write(text))
+                self.assertEqual(code, 2)
+                self.assertEqual(out, "")
+                self.assertEqual(len(err.splitlines()), 1)
+                self.assertTrue(err.startswith("toolsmell: "))
+
+    def test_non_string_required_entries_are_ignored(self):
+        props = {"a": {"type": "string"}}
+        tools = parse_tools({"tools": [
+            {"name": "t1", "inputSchema": {"properties": props, "required": [{"x": 1}, "a"]}},
+            {"name": "t2", "inputSchema": {"properties": props, "required": [["a"]]}},
+            {"name": "t3", "inputSchema": {"allOf": [{"properties": props, "required": [{}]}]}},
+        ]})
+        self.assertTrue(tools[0].params[0].required)
+        for tool in tools[1:]:
+            with self.subTest(tool=tool.name):
+                self.assertFalse(tool.params[0].required)
+                self.assertTrue(tool.has_required_field)
+
+    def test_non_string_required_entries_lint_without_ts007(self):
+        desc = "Fetches a record and returns it, or an error if missing."
+        p = self._write(json.dumps({"tools": [{"name": "t1", "description": desc, "inputSchema": {
+            "type": "object", "properties": {"a": {"type": "string"}}, "required": [{}]}}]}))
+        result = lint_path(p)
+        self.assertNotIn("TS-007", [f.rule_id for f in result.findings])
 
 
 if __name__ == "__main__":

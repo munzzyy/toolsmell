@@ -193,6 +193,39 @@ def run_oversized() -> None:
     time.sleep(3600)
 
 
+def _answer_tools_list_raw(result_json: str) -> None:
+    """Open like a legacy server, then answer tools/list with `result_json`
+    written verbatim, so a hostile payload reaches the client's real parse
+    path rather than tripping the probe fallback."""
+    _legacy_open()
+    list_request = _read_request()
+    sys.stdout.write('{"jsonrpc": "2.0", "id": %d, "result": %s}\n'
+                     % (list_request["id"], result_json))
+    sys.stdout.flush()
+
+
+def run_deep() -> None:
+    _answer_tools_list_raw('{"tools": ' + "[" * 200_000 + "]" * 200_000 + "}")
+
+
+def run_bigint() -> None:
+    _answer_tools_list_raw(
+        '{"tools": [{"name": "t", "description": "x", "inputSchema": '
+        '{"type": "object", "properties": {"a": {"type": "string", '
+        '"maxLength": ' + "9" * 5000 + "}}}}]}")
+
+
+def run_bad_required() -> None:
+    props = {"a": {"type": "string"}}
+    desc = "Fetches a record and returns it, or an error if missing."
+    _answer_tools_list_raw(json.dumps({"tools": [
+        {"name": "t1", "description": desc, "inputSchema": {
+            "type": "object", "properties": props, "required": [{"x": 1}]}},
+        {"name": "t2", "description": desc, "inputSchema": {
+            "type": "object", "allOf": [{"properties": props, "required": [{}]}]}},
+    ]}))
+
+
 def run_startup_failure() -> None:
     # The shape of the most common --stdio failure: the server never gets
     # far enough to speak the protocol, and the only explanation goes to
@@ -224,6 +257,9 @@ _MODES = {
     "exit": run_exit,
     "malformed": run_malformed,
     "oversized": run_oversized,
+    "deep": run_deep,
+    "bigint": run_bigint,
+    "bad-required": run_bad_required,
 }
 
 

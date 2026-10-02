@@ -91,6 +91,18 @@ class FetchToolsViaStdio(unittest.TestCase):
         finally:
             mcp_stdio.MAX_RESPONSE_BYTES = original
 
+    def test_hostile_tools_list_is_a_stdio_error_not_a_crash(self):
+        for mode, words in (("deep", "levels deep"), ("bigint", "4300")):
+            with self.subTest(mode=mode):
+                with self.assertRaises(StdioError) as ctx:
+                    fetch_tools_via_stdio(_cmd(mode))
+                self.assertIn(words, str(ctx.exception))
+
+    def test_non_string_required_entries_reach_the_linter(self):
+        tools = parse_tools(fetch_tools_via_stdio(_cmd("bad-required")))
+        self.assertEqual([t.name for t in tools], ["t1", "t2"])
+        self.assertTrue(all(t.has_required_field for t in tools))
+
     def test_empty_command_raises(self):
         with self.assertRaises(StdioError):
             fetch_tools_via_stdio("   ")
@@ -263,6 +275,15 @@ class CLIStdio(unittest.TestCase):
     def test_neither_target_nor_stdio_is_a_usage_error(self):
         code, _ = self._run([])
         self.assertEqual(code, 2)
+
+    def test_hostile_server_response_exits_two(self):
+        for mode in ("deep", "bigint"):
+            with self.subTest(mode=mode):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    code, out = self._run(["--stdio", _cmd(mode)])
+                self.assertEqual(code, 2)
+                self.assertNotIn("Traceback", err.getvalue())
 
     def test_connection_failure_is_a_usage_error_not_a_crash(self):
         code, _ = self._run(["--stdio", "no-such-binary-anywhere-on-this-machine"])

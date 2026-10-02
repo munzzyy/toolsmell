@@ -29,7 +29,7 @@ import threading
 import time
 
 from . import __version__
-from .manifest import MAX_FILE_BYTES
+from .manifest import MAX_FILE_BYTES, parse_json
 
 # A tools/list response describing a real server has no business being any
 # bigger than a manifest file would be -- a malicious or just-broken server
@@ -214,11 +214,11 @@ def _recv_response(reader: _LineReader, deadline: float, expected_id: int) -> di
     while True:
         line = reader.readline(deadline)
         try:
-            message = json.loads(line.decode("utf-8"))
+            message = parse_json(line.decode("utf-8"))
         except UnicodeDecodeError as e:
             raise StdioError(f"server response is not valid UTF-8: {e}")
-        except json.JSONDecodeError as e:
-            raise StdioError(f"server response is not valid JSON: {e}")
+        except ValueError as e:
+            raise StdioError(f"server response {e}")
         if isinstance(message, dict) and message.get("id") == expected_id:
             return message
 
