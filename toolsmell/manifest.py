@@ -1,17 +1,25 @@
 """Load and validate an MCP tools/list-shaped manifest.
 
-Accepts a JSON file with a top-level "tools" array, each entry shaped like
-{"name": ..., "description": ..., "inputSchema": {...}} -- the shape an MCP
-server's tools/list response returns. Nothing here is ever executed or
-evaluated; malformed input raises ManifestError with a plain message instead
-of a traceback.
+Accepts three shapes of JSON file, each holding tool entries like
+{"name": ..., "description": ..., "inputSchema": {...}}:
+
+- the tools/list result object, {"tools": [...]}
+- the whole JSON-RPC response saved as-is, {"jsonrpc": "2.0", "id": 1,
+  "result": {"tools": [...]}}
+- a bare array of tools pasted into a file, [...]
+
+Nothing here is ever executed or evaluated; malformed input raises
+ManifestError with a plain message instead of a traceback.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from .report import _clean
 
 # A tools/list response describing a real server has no business being
 # bigger than this. Reject oversized input up front instead of reading an
@@ -265,12 +273,40 @@ def load_manifest(path) -> list:
         data = parse_json(text)
     except ValueError as e:
         raise ManifestError(f"{p} {e}")
-    return parse_tools(data, source=str(p))
+    container = _tools_container(data, str(p))
+    tools = parse_tools(container, source=str(p))
+    cursor = container.get("nextCursor") if isinstance(container, dict) else None
+    if isinstance(cursor, str) and cursor:
+        print(f"toolsmell: {p} is one page of a tools/list response "
+              f"(nextCursor is set), so only the {len(tools)} tool(s) on it "
+              "get linted. Put every page's tools in one file, or use --stdio "
+              "to follow the cursor.", file=sys.stderr)
+    return tools
+
+
+def _tools_container(data, source: str):
+    """The object that should hold the 'tools' array, given either that
+    object, a saved JSON-RPC response wrapped around it, or a bare array."""
+    if isinstance(data, list):
+        return {"tools": data}
+    if not isinstance(data, dict) or "tools" in data:
+        return data
+    result = data.get("result")
+    if isinstance(result, dict):
+        return result
+    error = data.get("error")
+    if error is not None:
+        detail = error.get("message") if isinstance(error, dict) else error
+        raise ManifestError(
+            f"{source}: this is a JSON-RPC error response, not a tool list: "
+            f"{_clean(str(detail))}")
+    return data
 
 
 def parse_tools(data, source: str = "<data>") -> list:
     """Validate already-parsed JSON data into a list[Tool]. Never raises on
     malformed shape -- it raises ManifestError with a message instead."""
+    data = _tools_container(data, source)
     if not isinstance(data, dict):
         raise ManifestError(f"{source}: expected a JSON object with a 'tools' array")
     tools = data.get("tools")

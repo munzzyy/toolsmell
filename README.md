@@ -209,8 +209,16 @@ so a hung or misbehaving server can't wedge the run.
 
 **A static file (the manual way).** Call the server's `tools/list` method
 yourself and save what comes back, or paste the tools array into a file by
-hand -- either way, once it's JSON on disk, `toolsmell ./tools.json` lints
-it exactly the same.
+hand. toolsmell reads any of the three shapes that leaves you with and
+lints them all the same:
+
+- the result object, `{"tools": [...]}`
+- the whole JSON-RPC response, `{"jsonrpc": "2.0", "id": 1, "result": {"tools": [...]}}`
+- a bare array of tools, `[...]`
+
+A saved error response exits 2 and quotes the server's message. If the
+response carries a `nextCursor`, it's one page of a longer list: toolsmell
+lints the tools on it and says on stderr that the rest are missing.
 
 ## pre-commit
 

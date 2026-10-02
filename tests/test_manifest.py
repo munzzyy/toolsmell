@@ -33,6 +33,10 @@ class ParseTools(unittest.TestCase):
 
     def test_top_level_not_object_raises(self):
         with self.assertRaises(ManifestError):
+            parse_tools("tools")
+
+    def test_bare_array_of_non_objects_raises(self):
+        with self.assertRaises(ManifestError):
             parse_tools([1, 2, 3])
 
     def test_missing_tools_key_raises(self):
@@ -165,6 +169,62 @@ class RefOnTheSchemaRoot(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp()) / "tools.json"
         tmp.write_text(json.dumps({"tools": [tool]}), encoding="utf-8")
         return tmp
+
+
+_WEATHER = {"name": "get_weather",
+            "description": "Fetches the current weather for a city and returns it "
+                           "as JSON, or an error if the city is unknown.",
+            "inputSchema": {"type": "object", "properties": {
+                "city": {"type": "string", "description": "City name"}},
+                "required": ["city"]}}
+
+
+class SavedResponseShapes(unittest.TestCase):
+    """The README tells hosted-server users to save what tools/list sends
+    back, or paste the tools array into a file. Both have to lint."""
+
+    def _load(self, data):
+        tmp = Path(tempfile.mkdtemp()) / "tools.json"
+        tmp.write_text(json.dumps(data), encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            tools = load_manifest(tmp)
+        return tools, err.getvalue()
+
+    def test_envelope_and_bare_array_load_like_the_result_object(self):
+        plain, _ = self._load({"tools": [_WEATHER]})
+        for data in ({"jsonrpc": "2.0", "id": 1, "result": {"tools": [_WEATHER]}},
+                     [_WEATHER]):
+            with self.subTest(shape=type(data).__name__):
+                tools, err = self._load(data)
+                self.assertEqual(tools, plain)
+                self.assertEqual(err, "")
+
+    def test_error_response_names_the_server_message(self):
+        with self.assertRaises(ManifestError) as ctx:
+            self._load({"jsonrpc": "2.0", "id": 1,
+                        "error": {"code": -32601, "message": "nope"}})
+        self.assertIn("nope", str(ctx.exception))
+
+    def test_error_message_cannot_draw_on_the_terminal(self):
+        with self.assertRaises(ManifestError) as ctx:
+            self._load({"jsonrpc": "2.0", "id": 1,
+                        "error": {"code": 1, "message": "bad\x1b[31m\nfake line"}})
+        message = str(ctx.exception)
+        self.assertNotIn("\x1b", message)
+        self.assertNotIn("\n", message)
+
+    def test_one_page_of_a_paginated_response_says_so(self):
+        tools, err = self._load({"jsonrpc": "2.0", "id": 1,
+                                 "result": {"tools": [_WEATHER], "nextCursor": "abc"}})
+        self.assertEqual([t.name for t in tools], ["get_weather"])
+        self.assertIn("nextCursor", err)
+        self.assertTrue(err.startswith("toolsmell: "))
+
+    def test_object_with_no_tools_anywhere_is_still_rejected(self):
+        with self.assertRaises(ManifestError) as ctx:
+            self._load({"foo": 1})
+        self.assertIn("'tools' is missing or is not an array", str(ctx.exception))
 
 
 class LoadManifestFromDisk(unittest.TestCase):
