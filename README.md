@@ -313,6 +313,22 @@ MUST and a conforming client drops the tool rather than warning about it:
   `--select`, or (with `--stdio`) the server couldn't be reached, timed
   out, or sent back something that isn't a valid response.
 
+## Roadmap
+
+What is left needs a release, a package index or a decision before it
+needs more code.
+
+- A v0.2.0 tag. Everything under Unreleased in [CHANGELOG.md](CHANGELOG.md)
+  is on `main` but in no tag yet. The `@v0.1.0` pin in the CI snippet and
+  `rev: v0.1.0` for pre-commit get none of it, `--stdio` included. Pin a
+  commit from `main` if you need it sooner.
+- A PyPI release so that `pipx install toolsmell` works. Until then install
+  from the repo as [Install](#install) shows.
+- Linting a hosted server directly. Today a remote server goes through a
+  saved `tools/list` response (see [What it does not do](#what-it-does-not-do)).
+  An HTTP transport would break the promise that toolsmell never touches the
+  network, so it waits on a decision first.
+
 ## Contributing
 
 Found a smell that should have been flagged and wasn't, or a false
