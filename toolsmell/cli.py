@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 
@@ -12,6 +13,20 @@ from .lint import lint_data, lint_path
 from .manifest import ManifestError
 from .mcp_stdio import StdioError, fetch_tools_via_stdio
 from .report import _clean, render_human, render_json, render_json_multi
+
+
+MAX_TIMEOUT = 86_400
+
+
+def _seconds(text: str) -> float:
+    try:
+        value = float(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number of seconds")
+    if not (math.isfinite(value) and 0 < value <= MAX_TIMEOUT):
+        raise argparse.ArgumentTypeError(
+            f"must be more than 0 and at most {MAX_TIMEOUT} seconds")
+    return value
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -28,6 +43,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="run CMD as a live MCP server and lint its real tools/list response, "
              "instead of reading a file. This is the one thing in toolsmell that "
              "executes a subprocess -- only point it at a server you already trust")
+    p.add_argument(
+        "--timeout", type=_seconds, metavar="SECONDS",
+        help="with --stdio, the time budget for the whole exchange with the "
+             "server, from starting it to the last tools/list page (default: 20)")
     p.add_argument("--json", action="store_true", help="machine-readable JSON output")
     p.add_argument(
         "--max-score", type=int, default=50, metavar="N",
@@ -160,6 +179,10 @@ def main(argv=None) -> int:
               file=sys.stderr)
         return 2
 
+    if args.timeout is not None and not args.stdio:
+        print("toolsmell: --timeout only applies to --stdio", file=sys.stderr)
+        return 2
+
     color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
 
     # Resolved up front so a bad rule id fails before any report prints.
@@ -171,7 +194,7 @@ def main(argv=None) -> int:
 
     if args.stdio:
         try:
-            data = fetch_tools_via_stdio(args.stdio)
+            data = fetch_tools_via_stdio(args.stdio, timeout=args.timeout)
             result = lint_data(data, source=f"stdio:{args.stdio}",
                                enabled=selections[0])
         except (StdioError, ManifestError) as e:

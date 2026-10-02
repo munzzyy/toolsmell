@@ -83,28 +83,44 @@ def run_ok() -> None:
 
 
 def run_modern() -> None:
-    """A 2026-07-28 server: server/discover is the entry point and there is
-    no initialize at all."""
-    request = _read_request()
-    if request.get("method") != DISCOVER_METHOD:
-        _error(request.get("id"), METHOD_NOT_FOUND,
-               f"this server only speaks {MODERN_VERSION}")
-        return
-    if not _has_required_meta(request):
-        _error(request["id"], -32602, "request _meta is missing required fields")
-        return
-    _write({"jsonrpc": "2.0", "id": request["id"], "result": {
-        "protocolVersion": MODERN_VERSION,
-        "capabilities": {"tools": {}},
-        "serverInfo": {"name": "fake-mcp-server", "version": "0"},
-    }})
-    list_request = _read_request()
-    if not _has_required_meta(list_request):
-        _error(list_request["id"], -32602,
-               "tools/list _meta is missing required fields")
-        return
-    _write({"jsonrpc": "2.0", "id": list_request["id"],
-            "result": MODERN_TOOLS_RESULT})
+    """A 2026-07-28 server: server/discover is the entry point, there is no
+    initialize at all, and a request without the _meta fields is refused.
+    It answers each request in turn until stdin closes, like a real one."""
+    for line in sys.stdin:
+        request = json.loads(line)
+        if "id" not in request:
+            continue
+        method = request.get("method")
+        if method not in (DISCOVER_METHOD, "tools/list"):
+            _error(request["id"], METHOD_NOT_FOUND,
+                   f"this server only speaks {MODERN_VERSION}")
+        elif not _has_required_meta(request):
+            _error(request["id"], -32602, "request _meta is missing required fields")
+        elif method == DISCOVER_METHOD:
+            _write({"jsonrpc": "2.0", "id": request["id"], "result": {
+                "protocolVersion": MODERN_VERSION,
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "fake-mcp-server", "version": "0"},
+            }})
+        else:
+            _write({"jsonrpc": "2.0", "id": request["id"],
+                    "result": MODERN_TOOLS_RESULT})
+
+
+def run_slow_modern() -> None:
+    """A modern server that takes longer to start than the version probe
+    waits, like an npx or uvx cold start."""
+    time.sleep(float(sys.argv[2]) if len(sys.argv) > 2 else 1.0)
+    run_modern()
+
+
+def run_ping_first() -> None:
+    """Opens with its own ping, reusing id 1, and a log notification before
+    it reads anything. Neither one is the answer to server/discover."""
+    _write({"jsonrpc": "2.0", "id": 1, "method": "ping"})
+    _write({"jsonrpc": "2.0", "method": "notifications/message",
+            "params": {"level": "info", "data": "starting up"}})
+    run_ok()
 
 
 def run_unsupported_version() -> None:
@@ -248,6 +264,8 @@ def run_stderr_flood() -> None:
 _MODES = {
     "ok": run_ok,
     "modern": run_modern,
+    "slow-modern": run_slow_modern,
+    "ping-first": run_ping_first,
     "unsupported-version": run_unsupported_version,
     "discover-silent": run_discover_silent,
     "startup-failure": run_startup_failure,

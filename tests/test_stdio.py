@@ -84,10 +84,9 @@ class FetchToolsViaStdio(unittest.TestCase):
             # must never swallow a size cap the same way.
             with self.assertRaises(mcp_stdio.StdioLimitError) as ctx:
                 fetch_tools_via_stdio(_cmd("oversized"))
-            # A live server has no way to trim its own response, unlike a
-            # static file target, so the message should point at the one
-            # thing that could actually explain it: missing pagination.
+            # The cap counts the whole session, so paging does not help.
             self.assertIn("nextCursor", str(ctx.exception))
+            self.assertIn("every tools/list page together", str(ctx.exception))
         finally:
             mcp_stdio.MAX_RESPONSE_BYTES = original
 
@@ -184,6 +183,30 @@ class ProtocolNegotiation(unittest.TestCase):
         with _FastDiscover():
             result = fetch_tools_via_stdio(_cmd("discover-silent"))
         self.assertEqual(result["tools"][0]["name"], "get_weather")
+
+    def test_a_server_ping_reusing_id_1_is_not_the_probe_answer(self):
+        # Taking that ping as the probe answer ends in 'not initialized'.
+        result = fetch_tools_via_stdio(_cmd("ping-first"))
+        self.assertEqual(result["tools"][0]["name"], "get_weather")
+
+    def test_a_modern_server_slower_than_the_probe_is_still_reached(self):
+        # The late server/discover answer has to win over the fallback.
+        with mock.patch.object(mcp_stdio, "DISCOVER_TIMEOUT", 0.3):
+            result = fetch_tools_via_stdio(_cmd("slow-modern 0.6"))
+        self.assertEqual(result["tools"][0]["name"], "modern_weather")
+
+    def test_timeout_replaces_the_default_budget(self):
+        started = time.monotonic()
+        with _FastDiscover(0.2), self.assertRaises(StdioError):
+            fetch_tools_via_stdio(_cmd("hang"), timeout=0.4)
+        self.assertLess(time.monotonic() - started, 10.0)
+
+    def test_timeout_lifts_the_per_read_ceiling(self):
+        # The default ceiling on one read would give up on this server.
+        with mock.patch.object(mcp_stdio, "READ_TIMEOUT", 0.2), \
+                mock.patch.object(mcp_stdio, "DISCOVER_TIMEOUT", 0.2):
+            result = fetch_tools_via_stdio(_cmd("slow-modern 0.5"), timeout=10)
+        self.assertEqual(result["tools"][0]["name"], "modern_weather")
 
     def test_probe_budget_comes_out_of_the_overall_deadline(self):
         # A hung server must still die on PROCESS_TIMEOUT, not on
@@ -284,6 +307,27 @@ class CLIStdio(unittest.TestCase):
                     code, out = self._run(["--stdio", _cmd(mode)])
                 self.assertEqual(code, 2)
                 self.assertNotIn("Traceback", err.getvalue())
+
+    def test_timeout_flag_reaches_the_server(self):
+        code, out = self._run(["--stdio", _cmd("modern"), "--timeout", "30", "--no-color"])
+        self.assertEqual(code, 1)
+        self.assertIn("modern_weather", out)
+
+    def test_timeout_must_be_a_positive_number(self):
+        for value in ("0", "-1", "nan", "inf", "soon"):
+            with self.subTest(value=value):
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as cm, contextlib.redirect_stderr(err):
+                    cli.main(["--stdio", _cmd("modern"), f"--timeout={value}"])
+                self.assertEqual(cm.exception.code, 2)
+                self.assertIn("seconds", err.getvalue())
+
+    def test_timeout_without_stdio_is_a_usage_error(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code, _ = self._run(["examples/weather-tool-clean.json", "--timeout", "5"])
+        self.assertEqual(code, 2)
+        self.assertIn("--timeout", err.getvalue())
 
     def test_connection_failure_is_a_usage_error_not_a_crash(self):
         code, _ = self._run(["--stdio", "no-such-binary-anywhere-on-this-machine"])

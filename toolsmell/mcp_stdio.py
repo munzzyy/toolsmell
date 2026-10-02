@@ -111,6 +111,11 @@ class StdioLimitError(StdioError):
     """
 
 
+class _ReadTimeout(StdioError):
+    """No line arrived in time. The version probe reads this as "maybe a
+    modern server still starting up" rather than "a legacy server"."""
+
+
 class _LineReader:
     """Reads newline-delimited bytes off a pipe on a background thread and
     hands complete lines to the caller through a queue, so the caller can
@@ -176,22 +181,24 @@ class _LineReader:
                 return out  # eof, or the reader hit its size cap
             out.append(payload)
 
-    def readline(self, deadline: float) -> bytes:
+    def readline(self, deadline: float, read_timeout: float = None) -> bytes:
         """Return the next complete line, waiting at most until `deadline`
-        (an absolute time.monotonic() value) and at most READ_TIMEOUT for
-        this one call, whichever is sooner."""
+        (an absolute time.monotonic() value) and at most `read_timeout`
+        (READ_TIMEOUT by default) for this one call, whichever is sooner."""
+        ceiling = READ_TIMEOUT if read_timeout is None else read_timeout
         remaining = deadline - time.monotonic()
-        wait = max(0.0, min(remaining, READ_TIMEOUT))
+        wait = max(0.0, min(remaining, ceiling))
         try:
             kind, payload = self._queue.get(timeout=wait)
         except queue.Empty:
-            raise StdioError(f"server did not respond within {READ_TIMEOUT:.0f}s")
+            raise _ReadTimeout(f"server did not respond within {wait:.0f}s")
         if kind == "oversized":
             raise StdioLimitError(
-                f"server response exceeded {MAX_RESPONSE_BYTES} bytes -- if "
-                "this is a real tool list rather than a misbehaving server, "
-                "the server should split it across pages with a tools/list "
-                "'nextCursor' instead of returning it all at once")
+                f"server wrote more than {MAX_RESPONSE_BYTES} bytes. The cap "
+                "covers everything it sends in the session, every tools/list "
+                "page together, the same as the size limit on a manifest "
+                "file, so splitting the list with 'nextCursor' does not raise "
+                "it")
         if kind == "eof":
             raise StdioError("server closed its output before responding")
         return payload
@@ -205,21 +212,26 @@ def _send(proc: "subprocess.Popen", message: dict) -> None:
         raise StdioError(f"could not write to the server's stdin: {e}")
 
 
-def _recv_response(reader: _LineReader, deadline: float, expected_id: int) -> dict:
-    """Read lines until one carries `expected_id`. A compliant server can
-    interleave notifications (log messages, progress) with no "id" before
-    the actual response; those are skipped rather than treated as the
-    answer. Still bounded by the same overall deadline either way, so a
-    server that never stops chattering can't stall this past PROCESS_TIMEOUT."""
+def _recv_response(reader: _LineReader, deadline: float, expected_id,
+                   read_timeout: float = None) -> dict:
+    """Read lines until a response to `expected_id` (one id, or a set of
+    them) arrives. A compliant server can interleave notifications and its
+    own requests, such as a ping that happens to reuse id 1, before the
+    answer; only a message with a 'result' or an 'error' and no 'method'
+    is a response. Still bounded by the same overall deadline either way,
+    so a server that never stops chattering can't stall this past it."""
+    expected = expected_id if isinstance(expected_id, (set, frozenset)) else {expected_id}
     while True:
-        line = reader.readline(deadline)
+        line = reader.readline(deadline, read_timeout)
         try:
             message = parse_json(line.decode("utf-8"))
         except UnicodeDecodeError as e:
             raise StdioError(f"server response is not valid UTF-8: {e}")
         except ValueError as e:
             raise StdioError(f"server response {e}")
-        if isinstance(message, dict) and message.get("id") == expected_id:
+        if (isinstance(message, dict) and "method" not in message
+                and ("result" in message or "error" in message)
+                and message.get("id") in expected):
             return message
 
 
@@ -307,23 +319,13 @@ def _request(request_id: int, method: str, params=None, modern: bool = True) -> 
     return {"jsonrpc": "2.0", "id": request_id, "method": method, "params": body}
 
 
-def _probe_discover(proc, reader: _LineReader, deadline: float) -> bool:
-    """Ask the server whether it speaks 2026-07-28. True means it does.
+DISCOVER_ID = 1
 
-    Three outcomes, per the stdio transport spec. A result means modern. An
-    UnsupportedProtocolVersionError means modern but on a version we can't
-    talk, and falling back would only hide that, so it raises. Anything else
-    (any other error code, a timeout, junk on the wire) means the server has
-    never heard of the method, which is what a legacy server looks like.
-    """
-    probe_deadline = min(deadline, time.monotonic() + DISCOVER_TIMEOUT)
-    _send(proc, _request(1, DISCOVER_METHOD))
-    try:
-        response = _recv_response(reader, probe_deadline, 1)
-    except StdioLimitError:
-        raise  # a size cap is never a reason to retry
-    except StdioError:
-        return False
+
+def _discover_verdict(response: dict) -> bool:
+    """True if a server/discover response means the server speaks
+    2026-07-28. Raises on UnsupportedProtocolVersionError: that server is
+    modern on a version we can't talk, and falling back would only hide it."""
     error = response.get("error")
     if error is None:
         return True
@@ -337,11 +339,36 @@ def _probe_discover(proc, reader: _LineReader, deadline: float) -> bool:
     return False
 
 
+def _probe_discover(proc, reader: _LineReader, deadline: float):
+    """Ask the server whether it speaks 2026-07-28: True, False, or None
+    when it has not answered within DISCOVER_TIMEOUT.
+
+    A result means modern. Any other error code or junk on the wire means
+    the server has never heard of the method, which is what a legacy server
+    looks like. No answer at all is either a legacy server that ignores
+    unknown methods or a modern one still starting up, so the caller keeps
+    listening for a late answer while it tries the legacy handshake.
+    """
+    probe_deadline = min(deadline, time.monotonic() + DISCOVER_TIMEOUT)
+    _send(proc, _request(DISCOVER_ID, DISCOVER_METHOD))
+    try:
+        response = _recv_response(reader, probe_deadline, DISCOVER_ID)
+    except StdioLimitError:
+        raise  # a size cap is never a reason to retry
+    except _ReadTimeout:
+        return None
+    except StdioError:
+        return False
+    return _discover_verdict(response)
+
+
 def _legacy_handshake(proc, reader: _LineReader, deadline: float,
-                      request_id: int) -> None:
+                      request_id: int, probe_pending: bool,
+                      read_timeout: float = None) -> bool:
     """The pre-2026-07-28 opening: `initialize`, then the
     `notifications/initialized` notice the spec requires before any other
-    call."""
+    call. Returns True instead if a late server/discover answer shows the
+    server is modern after all."""
     _send(proc, {
         "jsonrpc": "2.0", "id": request_id, "method": "initialize",
         "params": {
@@ -350,13 +377,21 @@ def _legacy_handshake(proc, reader: _LineReader, deadline: float,
             "clientInfo": {"name": "toolsmell", "version": __version__},
         },
     })
-    response = _recv_response(reader, deadline, request_id)
-    _check_error(response, "initialize")
-    _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+    waiting = {request_id, DISCOVER_ID} if probe_pending else {request_id}
+    while True:
+        response = _recv_response(reader, deadline, waiting, read_timeout)
+        if response.get("id") == DISCOVER_ID:
+            if _discover_verdict(response):
+                return True
+            waiting = {request_id}
+            continue
+        _check_error(response, "initialize")
+        _send(proc, {"jsonrpc": "2.0", "method": "notifications/initialized"})
+        return False
 
 
 def _list_tools(proc, reader: _LineReader, deadline: float, request_id: int,
-                modern: bool) -> list:
+                modern: bool, read_timeout: float = None) -> list:
     """Follow tools/list to the end of its pagination and return every tool."""
     tools = []
     cursor = None
@@ -364,7 +399,7 @@ def _list_tools(proc, reader: _LineReader, deadline: float, request_id: int,
     for _ in range(MAX_LIST_PAGES):
         params = {} if cursor is None else {"cursor": cursor}
         _send(proc, _request(request_id, "tools/list", params, modern=modern))
-        response = _recv_response(reader, deadline, request_id)
+        response = _recv_response(reader, deadline, request_id, read_timeout)
         _check_error(response, "tools/list")
         result = response.get("result")
         if not isinstance(result, dict):
@@ -400,14 +435,16 @@ def _split_command(command: str) -> list:
     return argv
 
 
-def fetch_tools_via_stdio(command: str) -> dict:
+def fetch_tools_via_stdio(command: str, timeout: float = None) -> dict:
     """Spawn `command`, speak the minimal MCP handshake over its stdio, and
     return the parsed tools/list result. The result is still untrusted --
     it's handed to the same parse_tools() a manifest file goes through, so
     a hostile server gets exactly the same treatment as a hostile file.
 
     `command` is split with shlex and run as a real argv list. There is no
-    shell involved in launching it, ever.
+    shell involved in launching it, ever. `timeout` replaces PROCESS_TIMEOUT
+    as the budget for the whole exchange, and lifts the per-read ceiling to
+    match.
     """
     try:
         argv = _split_command(command)
@@ -423,15 +460,20 @@ def fetch_tools_via_stdio(command: str) -> dict:
     except OSError as e:
         raise StdioError(f"cannot run {argv[0]!r}: {e}")
 
-    deadline = time.monotonic() + PROCESS_TIMEOUT
+    budget = PROCESS_TIMEOUT if timeout is None else timeout
+    deadline = time.monotonic() + budget
+    read_timeout = None if timeout is None else timeout
     reader = _LineReader(proc.stdout)
     err_reader = _LineReader(proc.stderr, limit=MAX_STDERR_BYTES,
                              flush_partial=True)
     try:
         modern = _probe_discover(proc, reader, deadline)
         if not modern:
-            _legacy_handshake(proc, reader, deadline, request_id=2)
-        tools = _list_tools(proc, reader, deadline, request_id=3, modern=modern)
+            modern = _legacy_handshake(proc, reader, deadline, request_id=2,
+                                       probe_pending=modern is None,
+                                       read_timeout=read_timeout)
+        tools = _list_tools(proc, reader, deadline, request_id=3, modern=modern,
+                            read_timeout=read_timeout)
     except StdioError as e:
         # Re-raise as the same class: StdioLimitError has to stay a limit
         # error after the stderr tail is bolted on.

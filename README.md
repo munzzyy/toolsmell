@@ -109,6 +109,7 @@ toolsmell ./tools.json --json       # machine-readable output
 toolsmell ./tools.json --max-score 30   # tighten the failing threshold (default 50)
 toolsmell ./tools.json --max-tool-score 40   # also fail if any single tool is this smelly
 toolsmell --stdio "python my_server.py"   # spawn a live MCP server and lint its real response
+toolsmell --stdio "npx my-server" --timeout 60   # give a slow-starting server longer than 20 s
 toolsmell --list-rules              # print every rule id and exit
 ```
 
@@ -188,7 +189,9 @@ it doesn't need to be told which revision yours speaks. The one case it
 won't retry is a server that answers the probe with
 `UnsupportedProtocolVersionError`: that server does speak the new protocol
 and has turned down toolsmell's version, and the old handshake wouldn't fix
-that.
+that. The probe waits 5 seconds. A server that answers it later, say after
+a slow `npx` or `uvx` start, still gets the new protocol, because
+toolsmell keeps listening for that answer while it tries the old one.
 
 If the server dies before answering, toolsmell prints its exit status and
 the tail of its stderr, since a missing module or a bad interpreter path is
@@ -205,8 +208,9 @@ an attacker a way to pick what gets executed on your machine. The server's
 `tools/list` response is treated as untrusted the same way a manifest file
 already is -- it's data, not code, and it goes through the exact same
 parser. toolsmell also enforces a wall-clock timeout on the whole exchange
-and a size cap on the response, and kills the process afterward either way,
-so a hung or misbehaving server can't wedge the run.
+(20 seconds, or whatever `--timeout` says) and a 5 MB cap on everything
+the server writes, and kills the process afterward either way, so a hung or
+misbehaving server can't wedge the run.
 
 **A static file (the manual way).** Call the server's `tools/list` method
 yourself and save what comes back, or paste the tools array into a file by
