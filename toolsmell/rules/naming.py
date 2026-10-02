@@ -1,6 +1,8 @@
 """TS-009: tool names that collide closely enough for an agent to pick the
-wrong one -- exact duplicates, one name as a near-prefix of another, or a
-short edit distance between otherwise similar-length names."""
+wrong one -- names equal once case and separators are ignored, one name as
+a near-prefix of another, or a short edit distance between otherwise
+similar-length names. An exact duplicate is TS-018's finding, not this one:
+a client keeps only one of the two, so there is no wrong one to call."""
 
 from __future__ import annotations
 
@@ -57,7 +59,7 @@ def _collides(a: str, b: str) -> bool:
 def check(tool, all_tools) -> list:
     findings = []
     for other in all_tools:
-        if other.index == tool.index:
+        if other.index == tool.index or other.name == tool.name:
             continue
         if _collides(tool.name, other.name):
             findings.append(catalog.build(

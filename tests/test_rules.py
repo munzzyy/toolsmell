@@ -256,10 +256,25 @@ class NoErrorGuidance(unittest.TestCase):
 
 
 class NameCollision(unittest.TestCase):
-    def test_exact_duplicate_name_fires(self):
+    def test_exact_duplicate_name_is_left_to_ts018(self):
+        # A client keeps only one of the two, so TS-018 owns this case.
         a = mk_tool("dup_tool", description="d")
         b = mk_tool("dup_tool", description="d", index=1)
-        self.assertIn("TS-009", _ids(naming.check(a, [a, b])))
+        self.assertNotIn("TS-009", _ids(naming.check(a, [a, b])))
+
+    def test_names_equal_after_normalizing_still_fire(self):
+        for x, y in (("get_user", "get-user"), ("Get_User", "get_user"),
+                     ("get_user", "get_users")):
+            with self.subTest(pair=(x, y)):
+                a = mk_tool(x, description="d")
+                b = mk_tool(y, description="d", index=1)
+                self.assertIn("TS-009", _ids(naming.check(a, [a, b])))
+
+    def test_exact_duplicate_still_collides_with_a_third_name(self):
+        a = mk_tool("get_user", description="d")
+        b = mk_tool("get_user", description="d", index=1)
+        c = mk_tool("get_users", description="d", index=2)
+        self.assertEqual(_ids(naming.check(a, [a, b, c])), ["TS-009"])
 
     def test_near_prefix_fires(self):
         a = mk_tool("search_items", description="d")

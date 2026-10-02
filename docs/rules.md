@@ -143,10 +143,11 @@ and what the error looks like.
 Name collides with another tool. Severity medium.
 
 This tool's name is a near-duplicate of another tool's name in the same
-manifest: an exact duplicate, a short prefix relationship ("search_items"
-vs. "search_items_v2"), or a small edit distance between similar-length
-names ("get_invoice" vs. "get_invoicee"). An agent can easily call the
-wrong one.
+manifest: the same name once case and separators are ignored ("get_user"
+vs. "Get-User"), a short prefix relationship ("search_items" vs.
+"search_items_v2"), or a small edit distance between similar-length names
+("get_invoice" vs. "get_invoicee"). An agent can easily call the wrong one.
+An exact duplicate is reported as [TS-018](#ts-018) instead.
 
 ```json
 {"tools": [{"name": "get_user"}, {"name": "get_users"}]}
