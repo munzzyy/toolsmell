@@ -47,6 +47,10 @@ goes up:
 If you fix a bug with no fixture attached, it can silently come back. A
 fixture is how the fix stays fixed.
 
+The README samples and `docs/media/demo.svg` are real output, and
+`tests/test_docs.py` fails when a rule message drifts from them. Redraw the
+SVG with `python scripts/render_demo.py` and paste the new samples in.
+
 Keep rules specific. A pattern that fires on ordinary, well-written
 descriptions is worse than one that misses an edge case, because noise
 trains people to ignore the tool.
